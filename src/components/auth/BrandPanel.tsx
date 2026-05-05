@@ -74,11 +74,19 @@ export function BrandPanel() {
 
           public/brand-text.png：从 logo 设计图 2.png 自动裁剪出的文字区域
             尺寸 1802×738（aspect ~2.44:1）
-            背景色与 panel 一致（#0c1925），无缝融合
+            原图背景色 #011226（比 panel 的 #0c1925 略深略蓝）
+            → 用 mix-blend-mode: lighten 让深色背景与 panel 融合
+
+          关于 mix-blend-mode: lighten：
+            CSS 混合模式之一，逐像素取 src 与 dst 的较亮值（max(src, dst)）
+            原理：暗像素被"忽略"，亮像素照常显示
+            效果：图片的深色背景被 panel 背景"覆盖"（亮度更高），矩形边界消失
+            而文字的亮青色像素本来就比两种背景都亮 → 完整显示
 
           h-12 lg:h-20  →  高度移动 48px / 桌面 80px（与 logo 同高）
           w-auto        →  按 1802:738 比例自动算宽（≈ 117px / 195px）
           select-none   →  禁止文本框选
+          mix-blend-lighten →  Tailwind 4 的混合模式工具类（= mix-blend-mode: lighten）
 
           ⚠️ 无障碍：alt 必须是 "Knowledge Engineering" 字符串，
                     因为屏幕阅读器读不出图片中的文字
@@ -87,7 +95,7 @@ export function BrandPanel() {
           src="/brand-text.png"
           alt="Knowledge Engineering"
           draggable={false}
-          className="h-12 lg:h-20 w-auto select-none"
+          className="h-12 lg:h-20 w-auto select-none mix-blend-lighten"
         />
       </div>
     </aside>
