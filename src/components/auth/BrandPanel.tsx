@@ -25,12 +25,17 @@
  *   "永远深色"：light / dark 主题切换不影响 brand 面板
  */
 
+import { useState, useCallback } from 'react'
 import {
   Cpu, Terminal, GitBranch, Database, Network,
   Braces, FileCode2, Server, Layers, Workflow,
 } from 'lucide-react'
 
 export function BrandPanel() {
+  const [loadedCount, setLoadedCount] = useState(0)
+  const onImageLoad = useCallback(() => setLoadedCount(n => n + 1), [])
+  const allLoaded = loadedCount >= 2
+
   return (
     <aside
       className="
@@ -40,6 +45,10 @@ export function BrandPanel() {
         min-h-[180px] lg:min-h-screen
         p-8 lg:p-16
       "
+      style={{
+        opacity: allLoaded ? 1 : 0,
+        transition: 'opacity 0.5s ease-out',
+      }}
     >
       {/* ── 点阵背景 ── */}
       <div
@@ -93,12 +102,14 @@ export function BrandPanel() {
           alt="Knowledge Engineering Logo"
           draggable={false}
           className="h-12 lg:h-36 w-auto select-none"
+          onLoad={onImageLoad}
         />
         <img
           src="/brand-text.png"
           alt="Knowledge Engineering"
           draggable={false}
           className="h-12 lg:h-36 w-auto select-none mix-blend-lighten"
+          onLoad={onImageLoad}
         />
       </div>
 
