@@ -68,24 +68,27 @@ export function BrandPanel() {
           className="h-12 lg:h-20 w-auto select-none"
         />
 
-        {/* ── 品牌名称（蓝图风格）──────────────────────────────────────────────
-          重要：data-text 属性 — .brand-text-glow 的 ::before / ::after 用它取文字内容。
-                必须和 <h1> 内文字完全一致，否则 ghost 副本会显示错的字。
+        {/* ── 品牌名称（直接用 logo 设计稿 2.png 中的文字图）─────────────────────
+          为保证"1:1 还原"原始设计稿的霓虹/蓝图视觉效果（CSS 模拟有差距），
+          这里直接把设计图 2.png 中的文字部分裁剪后作为图片使用。
 
-          className 解释：
-            brand-text-glow      → 全局 CSS 类（详见 src/index.css）：
-                                    青色实心 + 多层光晕 + 两层轮廓 ghost 副本
-            text-xl lg:text-3xl  → 字号：移动 20px / 桌面 30px
-            font-semibold        → 字重 600（半粗）
-            tracking-wider       → 字间距 0.05em（科技感拉宽）
-            whitespace-nowrap    → 禁止换行（避免响应式断行造成不雅观）
+          public/brand-text.png：从 logo 设计图 2.png 自动裁剪出的文字区域
+            尺寸 1802×738（aspect ~2.44:1）
+            背景色与 panel 一致（#0c1925），无缝融合
+
+          h-12 lg:h-20  →  高度移动 48px / 桌面 80px（与 logo 同高）
+          w-auto        →  按 1802:738 比例自动算宽（≈ 117px / 195px）
+          select-none   →  禁止文本框选
+
+          ⚠️ 无障碍：alt 必须是 "Knowledge Engineering" 字符串，
+                    因为屏幕阅读器读不出图片中的文字
         */}
-        <h1
-          className="brand-text-glow text-xl lg:text-3xl font-semibold tracking-wider whitespace-nowrap"
-          data-text="Knowledge Engineering"
-        >
-          Knowledge Engineering
-        </h1>
+        <img
+          src="/brand-text.png"
+          alt="Knowledge Engineering"
+          draggable={false}
+          className="h-12 lg:h-20 w-auto select-none"
+        />
       </div>
     </aside>
   )
