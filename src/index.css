@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* ── 页面整体淡入：React 挂载后统一显示，杜绝任何元素逐个蹦出 ── */
+@keyframes page-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+#root {
+  animation: page-fade-in 0.5s ease-out 0.15s both;
+}
+
 /* ── BrandPanel 背景层淡入：延迟 300ms 统一显示，避免图标逐个蹦出 ── */
 @keyframes brand-bg-fade-in {
   from { opacity: 0; }
