@@ -13,8 +13,9 @@
      主题下都是同一个深色值。
      oklch(0.18 0 0)：L=18% 亮度（接近纯黑），C=0 彩度（无色相），H=0 色相
      oklch 是感知均匀色彩空间——相同的 L 差值在视觉上差距均匀，比 hex 更可控。 */
-  --brand-panel-bg: oklch(0.18 0 0); /* 深灰，几乎黑 — 永远深色，不随主题变 */
-  --brand-panel-fg: oklch(1 0 0);    /* 纯白 — 在深底上保证对比度 ≥ 4.5:1 */
+  /* BrandPanel 背景色：直接用 logo 图片的背景色 #0c1925（深海军蓝），让 logo 与 panel 无缝融合 */
+  --brand-panel-bg: #0c1925;          /* 深海军蓝 — 与 public/logo.png 背景色完全一致 */
+  --brand-panel-fg: oklch(1 0 0);     /* 纯白 — 在深底上保证对比度 ≥ 4.5:1 */
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -47,8 +48,8 @@
 
 /* ──────────────── shadcn/ui design tokens（暗色） ──────────────── */
 .dark {
-  /* BrandPanel token：与亮色主题相同——brand 面板始终保持深色外观 */
-  --brand-panel-bg: oklch(0.18 0 0);
+  /* BrandPanel token：与亮色主题相同——brand 面板始终保持深色外观，匹配 logo 背景 */
+  --brand-panel-bg: #0c1925;
   --brand-panel-fg: oklch(1 0 0);
 
   --background: oklch(0.145 0 0);
