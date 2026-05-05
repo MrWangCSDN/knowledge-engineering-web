@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* ── BrandPanel 背景层淡入：延迟 300ms 统一显示，避免图标逐个蹦出 ── */
+@keyframes brand-bg-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.brand-bg-layer {
+  animation: brand-bg-fade-in 0.6s ease-out 0.3s both;
+}
+
 /* ── BrandPanel 波纹动画 ── */
 @keyframes ripple {
   0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }

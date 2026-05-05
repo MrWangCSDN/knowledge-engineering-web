@@ -43,7 +43,7 @@ export function BrandPanel() {
     >
       {/* ── 点阵背景 ── */}
       <div
-        className="pointer-events-none select-none absolute inset-0"
+        className="brand-bg-layer pointer-events-none select-none absolute inset-0"
         aria-hidden
         style={{
           backgroundImage: 'radial-gradient(circle, rgba(34,200,208,0.18) 1px, transparent 1px)',
@@ -54,7 +54,7 @@ export function BrandPanel() {
       />
 
       {/* ── 波纹涟漪层（从面板中心偏右下发散） ── */}
-      <div className="pointer-events-none select-none absolute inset-0" aria-hidden>
+      <div className="brand-bg-layer pointer-events-none select-none absolute inset-0" aria-hidden>
         {[0, 0.8, 1.6, 2.4, 3.2].map((delay) => (
           <span
             key={delay}
@@ -69,7 +69,7 @@ export function BrandPanel() {
       </div>
 
       {/* ── 科技感背景图标层（pointer-events-none 避免遮挡交互） ── */}
-      <div className="pointer-events-none select-none absolute inset-0" aria-hidden>
+      <div className="brand-bg-layer pointer-events-none select-none absolute inset-0" aria-hidden>
         <Cpu        className="absolute top-[8%]   right-[12%] w-28 h-28 text-[var(--brand-cyan)] opacity-[0.07] rotate-12" />
         <Terminal   className="absolute top-[22%]  right-[5%]  w-20 h-20 text-[var(--brand-cyan)] opacity-[0.06] -rotate-6" />
         <Braces     className="absolute top-[38%]  right-[18%] w-24 h-24 text-white              opacity-[0.05] rotate-3" />
