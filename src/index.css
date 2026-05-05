@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* ── BrandPanel 波纹动画 ── */
+@keyframes ripple {
+  0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+  15%  { opacity: 0.28; }
+  100% { transform: translate(-50%, -50%) scale(3.0); opacity: 0; }
+}
+.brand-ripple {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 200, 208, 0.3);
+  animation: ripple 4s ease-out infinite;
+  animation-fill-mode: both;
+}
+
 /* 暗色模式触发器：在 <html class="dark"> 时启用 */
 @custom-variant dark (&:where(.dark, .dark *));
 
