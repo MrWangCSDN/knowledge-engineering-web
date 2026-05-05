@@ -86,39 +86,34 @@ export function BrandPanel() {
         p-8 lg:p-16
       "
     >
-      {/* ── LOGO + 项目名 ──────────────────────────────────────────────────────── */}
-      {/*
-        div 容器 Tailwind 类说明：
-          flex         → display: flex（水平排列 LOGO 方块和项目名）
-          items-center → align-items: center（交叉轴垂直居中）
-          gap-3        → gap: 0.75rem（子元素之间 12px 间距）
-          mb-4         → margin-bottom: 1rem（移动端与下方内容的间距）
-          lg:mb-12     → 桌面端 margin-bottom: 3rem（更大留白，视觉更舒展）
-      */}
-      <div className="flex items-center gap-3 mb-4 lg:mb-12">
-        {/* ── LOGO 占位方块 ──────────────────────────────────────────────────────
-            h-8 w-8       → height/width: 2rem（32x32px 的正方形）
-            rounded       → border-radius: 0.25rem（轻微圆角）
-            bg-[var(--brand-panel-fg)]/10 →
-              background-color: var(--brand-panel-fg) 但透明度 10%
-              "/10" 是 Tailwind v4 的透明度语法：在颜色类后加 /<0-100> 设置 alpha
-              效果：白色背景 10% 不透明，呈现为微妙的白色光晕
-            grid              → display: grid（网格布局）
-            place-items-center → place-items: center（水平 + 垂直同时居中）
-            text-base         → font-size: 1rem（16px）
-            font-bold         → font-weight: 700
-        */}
-        <div className="h-8 w-8 rounded bg-[var(--brand-panel-fg)]/10 grid place-items-center text-base font-bold">
-          K
-        </div>
+      {/* ── LOGO（含品牌图标 + 文字）────────────────────────────────────────────
+        这是一张 PNG 图片：左侧是 "<E>" 括号样式的图标（电路 + 节点设计），
+        右侧是 "Knowledge Engineering" 文字。这两部分在图片中已经一起设计好。
 
-        {/* ── 项目名称 ─────────────────────────────────────────────────────────────
-            text-lg        → font-size: 1.125rem（18px）
-            font-semibold  → font-weight: 600（半粗体，介于 normal 和 bold 之间）
-            tracking-tight → letter-spacing: -0.025em（字间距略微收紧，视觉更紧凑）
-        */}
-        <span className="text-lg font-semibold tracking-tight">knowledge-engineering</span>
-      </div>
+        ── 关于 public/ 目录 ──────────────────────────────────────────────
+        Vite 处理 src/assets/ 下的图片会做 hash 重命名（适合 import 模式）；
+        放在 public/ 下，Vite 会原样发布到根 URL，引用直接写 "/logo.png"。
+        换句话说：public/logo.png  →  浏览器访问 http://host/logo.png
+
+        ── 关于 <img> 各属性 ───────────────────────────────────────────────
+          src         →  图片路径
+          alt         →  替代文本：屏幕阅读器读出 + 图片加载失败时显示
+                          这是无障碍（a11y）必备属性
+          draggable   →  HTML 图片默认可拖动产生 ghost；禁掉避免登录页误操作
+          className   →  Tailwind 类：
+                          h-14         →  height: 3.5rem（56px，移动端）
+                          lg:h-20      →  桌面 height: 5rem（80px）
+                          w-auto       →  宽度按原图比例自动算（不变形）
+                          select-none  →  禁止文本框选（鼠标拖选不会高亮）
+                          mb-4         →  margin-bottom: 1rem（移动端与下方间距）
+                          lg:mb-12     →  桌面 margin-bottom: 3rem（更宽松）
+      */}
+      <img
+        src="/logo.png"
+        alt="Knowledge Engineering"
+        draggable={false}
+        className="h-14 lg:h-20 w-auto select-none mb-4 lg:mb-12"
+      />
 
       {/* ── 一句话定位 ──────────────────────────────────────────────────────────────
           <p> 是语义化段落标签，放置产品一句话描述。
