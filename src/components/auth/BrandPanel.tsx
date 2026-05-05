@@ -112,7 +112,7 @@ export function BrandPanel() {
       </p>
 
       {/* ── 底部版权栏：mt-auto 将其推到 aside 底部 ── */}
-      <footer className="mt-auto pt-8 w-full flex flex-col gap-1 items-center border-t border-white/10">
+      <footer className="mt-auto pt-8 w-full flex flex-col gap-1 items-center" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
         <div className="flex items-center gap-4 text-xs text-white/35">
           <a
             href="https://gwzx.com"

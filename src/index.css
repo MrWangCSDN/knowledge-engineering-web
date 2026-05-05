@@ -157,3 +157,16 @@ body {
 }
 
 /* （.brand-text-glow CSS 模拟方案已移除 —— 改为直接用 public/brand-text.png 1:1 还原 logo 设计稿 2.png） */
+
+/* ── 覆盖浏览器 autofill 白底（dark 模式）──────────────────────────────────────
+   浏览器通过 :-webkit-autofill 强制设置白色背景，无法用 background 直接覆盖。
+   唯一有效方案：用超大 inset box-shadow "盖住"白底，同时延迟 transition 防止闪白。 */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px oklch(0.205 0 0) inset !important;
+  -webkit-text-fill-color: oklch(0.985 0 0) !important;
+  caret-color: oklch(0.985 0 0);
+  transition: background-color 5000s ease-in-out 0s;
+}
