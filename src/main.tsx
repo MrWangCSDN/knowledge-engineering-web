@@ -50,8 +50,10 @@ const queryClient = new QueryClient({
  * 把 hook 放在这里而不是 main.tsx 顶层，遵守了 React 的"hook 只能在组件内调用"规则：
  *   - 错误写法（会报错）：在 createRoot 外面调 useAutoRefresh()
  *   - 正确写法：在函数组件体内调 useAutoRefresh()，再 return <App />
+ *
+ * react-refresh：需要导出这个组件，使 HMR 能追踪其变化
  */
-function AppWithAutoRefresh() {
+export function AppWithAutoRefresh() {
   // useAutoRefresh：自定义 hook，内部启动定时器定期刷新访问令牌
   // 调用后无需手动处理返回值，副作用（定时刷新）自动运行
   useAutoRefresh()
