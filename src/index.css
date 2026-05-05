@@ -7,6 +7,15 @@
 :root {
   --radius: 0.5rem;
 
+  /* === 登录页 BrandPanel 专用 token ===
+     全局规则要求颜色走 CSS 变量。登录页的 brand 面板有意"永远深色"
+     （Sourcegraph / GitLab 等都是这种设计，加强品牌识别），所以 light 和 dark
+     主题下都是同一个深色值。
+     oklch(0.18 0 0)：L=18% 亮度（接近纯黑），C=0 彩度（无色相），H=0 色相
+     oklch 是感知均匀色彩空间——相同的 L 差值在视觉上差距均匀，比 hex 更可控。 */
+  --brand-panel-bg: oklch(0.18 0 0); /* 深灰，几乎黑 — 永远深色，不随主题变 */
+  --brand-panel-fg: oklch(1 0 0);    /* 纯白 — 在深底上保证对比度 ≥ 4.5:1 */
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
 
@@ -38,6 +47,10 @@
 
 /* ──────────────── shadcn/ui design tokens（暗色） ──────────────── */
 .dark {
+  /* BrandPanel token：与亮色主题相同——brand 面板始终保持深色外观 */
+  --brand-panel-bg: oklch(0.18 0 0);
+  --brand-panel-fg: oklch(1 0 0);
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
 
@@ -68,7 +81,13 @@
 }
 
 /* 把 tokens 暴露为 Tailwind 颜色（如 bg-background / text-foreground 即可使用） */
+/* @theme inline 告诉 Tailwind v4：把 --color-xxx 变量注册为颜色 utility class。
+   例如 --color-brand-panel-bg → 可以写 bg-brand-panel-bg / text-brand-panel-bg。
+   组件里也可以直接用 bg-[var(--brand-panel-bg)] 绕过这里，两种写法等价。 */
 @theme inline {
+  /* BrandPanel 专用颜色 token */
+  --color-brand-panel-bg: var(--brand-panel-bg);
+  --color-brand-panel-fg: var(--brand-panel-fg);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
