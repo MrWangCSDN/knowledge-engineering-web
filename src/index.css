@@ -16,6 +16,7 @@
   /* BrandPanel 背景色：直接用 logo 图片的背景色 #0c1925（深海军蓝），让 logo 与 panel 无缝融合 */
   --brand-panel-bg: #0c1925;          /* 深海军蓝 — 与 public/logo.png 背景色完全一致 */
   --brand-panel-fg: oklch(1 0 0);     /* 纯白 — 在深底上保证对比度 ≥ 4.5:1 */
+  --brand-cyan: #22c8d0;              /* 品牌主色青色 — 从 logo 右括号自动取色 */
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -51,6 +52,7 @@
   /* BrandPanel token：与亮色主题相同——brand 面板始终保持深色外观，匹配 logo 背景 */
   --brand-panel-bg: #0c1925;
   --brand-panel-fg: oklch(1 0 0);
+  --brand-cyan: #22c8d0;
 
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -138,4 +140,55 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   .brand-text-glow —— 品牌文字"蓝图/霓虹"风格
+
+   参考 public/logo 系列图片 2.png 的视觉效果：
+     1. 主文字：实心品牌青色 (#22c8d0)
+     2. 多层光晕（text-shadow）：模拟霓虹辉光
+     3. 两个轮廓 ghost 副本（::before / ::after 用 -webkit-text-stroke 镂空 + 偏移）
+        模拟蓝图草稿的"重影"质感
+
+   使用方式（要求 HTML 元素带 data-text 属性，pseudo-element 才能拿到文字）：
+     <h1 className="brand-text-glow" data-text="Knowledge Engineering">
+       Knowledge Engineering
+     </h1>
+   ────────────────────────────────────────────────────────────────────────────── */
+.brand-text-glow {
+  position: relative;
+  color: var(--brand-cyan);
+  /* 多层光晕：从内到外亮度递减、模糊半径递增，模拟霓虹光辉散射 */
+  text-shadow:
+    0 0 4px oklch(0.78 0.13 200 / 0.6),
+    0 0 12px oklch(0.78 0.13 200 / 0.35),
+    0 0 24px oklch(0.78 0.13 200 / 0.18);
+}
+
+/* 蓝图轮廓副本 1（向右下偏移） */
+.brand-text-glow::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  -webkit-text-stroke: 1px var(--brand-cyan);
+  color: transparent;
+  opacity: 0.4;
+  transform: translate(3px, 3px);
+  z-index: -1;
+  /* 保留布局对齐：pseudo 不影响文字位置 */
+  pointer-events: none;
+}
+
+/* 蓝图轮廓副本 2（向右上偏移，错位形成"草图"感） */
+.brand-text-glow::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  -webkit-text-stroke: 1px var(--brand-cyan);
+  color: transparent;
+  opacity: 0.25;
+  transform: translate(6px, -2px);
+  z-index: -1;
+  pointer-events: none;
 }
