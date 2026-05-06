@@ -29,6 +29,8 @@ import { RequireAuth } from '@/components/auth/RequireAuth'
 import { LoginPage } from '@/pages/LoginPage'
 // 受保护页面 —— 需要登录后才能访问
 import { HomePage } from '@/pages/HomePage'
+import { ChatPage } from '@/pages/ChatPage'
+import { RootRedirect } from '@/pages/RootRedirect'
 import { SearchPage } from '@/pages/SearchPage'
 import { MethodDetailPage } from '@/pages/MethodDetailPage'
 import { ImpactAnalysisPage } from '@/pages/ImpactAnalysisPage'
@@ -53,16 +55,23 @@ export default function App() {
         子路由（index / /search / ...）只有通过 RequireAuth 检查后才会被渲染。
       */}
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
-        {/* index Route：匹配根路径 "/"，渲染 HomePage */}
-        <Route index element={<HomePage />} />
-        {/* 普通路由：path 与 URL 精确匹配后渲染对应页面组件 */}
+        {/* / —— 根据工程列表 redirect 到 /project/<first> 或显示空状态 */}
+        <Route index element={<RootRedirect />} />
+
+        {/* 工程主页（聊天页） */}
+        <Route path="/project/:projectId" element={<ChatPage />} />
+        {/* W5 加：/project/:projectId/chat/:sessionId */}
+
+        {/* 旧首页保留作 fallback（未来逐步移除） */}
+        <Route path="/legacy-home" element={<HomePage />} />
+
+        {/* 其他既有页面（v1 不变，v1.5 视情况整合到 chat 流） */}
         <Route path="/search" element={<SearchPage />} />
         <Route path="/method" element={<MethodDetailPage />} />
-        {/* 动态段 :entityId 会作为 URL 参数传入组件，可通过 useParams() 读取 */}
         <Route path="/method/:entityId" element={<MethodDetailPage />} />
         <Route path="/impact" element={<ImpactAnalysisPage />} />
         <Route path="/table-access" element={<MethodTablePage />} />
-        {/* 通配路由 "*"：匹配所有未命中的路径，渲染 404 页面 */}
+
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

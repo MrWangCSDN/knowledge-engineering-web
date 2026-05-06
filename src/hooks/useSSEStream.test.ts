@@ -7,7 +7,7 @@
  *  - error 事件后状态变 'error'
  *  - HTTP 4xx 直接置 error
  */
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useSSEStream } from './useSSEStream'
 
