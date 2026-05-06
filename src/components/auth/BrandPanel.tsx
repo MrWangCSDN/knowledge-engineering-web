@@ -30,7 +30,9 @@ import { useState, useCallback } from 'react'
 export function BrandPanel() {
   const [loadedCount, setLoadedCount] = useState(0)
   const onImageLoad = useCallback(() => setLoadedCount(n => n + 1), [])
-  const allLoaded = loadedCount >= 2
+  // 等待 3 张图全部加载：logo.png + brand-text.png + skyline.jpg
+  // 配合 index.html 的 <link rel="preload"> 三张图并行预取，慢网下也能整齐显示
+  const allLoaded = loadedCount >= 3
 
   return (
     <aside
@@ -92,6 +94,7 @@ export function BrandPanel() {
           src="/skyline.jpg"
           alt=""
           draggable={false}
+          onLoad={onImageLoad}
           className="absolute inset-0 w-full h-full object-cover object-bottom opacity-40"
         />
       </div>
