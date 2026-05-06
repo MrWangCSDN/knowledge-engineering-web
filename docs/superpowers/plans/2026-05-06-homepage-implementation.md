@@ -14,10 +14,10 @@
 
 **Spec：** `/Users/java/obsidian/01 Engineering/knowledge-engineering-web/首页设计.md`
 
-**项目仓库（多个）：**
+**项目仓库（3 个，分工明确）：**
 - 前端：`/Users/java/knowledge-engineering-web/`
-- 后端：`/Users/java/knowledge-engineering/`（api.py 所在）
-- Auth 后端：`/Users/java/knowledge-engineering-auth/`（auth_router 所在；如已合并到主仓忽略）
+- **后端 Auth/API 仓**：`/Users/java/knowledge-engineering-auth/`（已有 db.py / auth_router / alembic / users 表 — **新加的 5 张表 + project_router + qa_router + qa_engine 都放这里**）
+- **后端主仓（Pipeline + Weaviate）**：`/Users/java/knowledge-engineering/`（仅 W7 改造 src/core/weaviate_defaults.py、src/knowledge/weaviate_*_store.py、src/pipeline/）
 
 ---
 
@@ -77,7 +77,7 @@ src/components/layout/Sidebar.tsx         # 改为 SessionHistory 容器
 package.json                              # 加 vitest, react-markdown, eventsource-parser
 ```
 
-### 后端新增/修改文件（在 `/Users/java/knowledge-engineering/`）
+### 后端 Auth/API 仓新增/修改（`/Users/java/knowledge-engineering-auth/`）
 
 **新增：**
 ```
@@ -87,28 +87,41 @@ src/service/
 ├── project_models.py                     # Pydantic schemas
 ├── qa_models.py
 ├── session_models.py
-├── db_models.py                          # 5 张新表 SQLAlchemy ORM
+├── db_models_homepage.py                 # 5 张新表 SQLAlchemy ORM（与 auth_models.py 共用 Base）
 └── qa_engine/
     ├── __init__.py
-    ├── retriever.py                      # Weaviate + 图查询
+    ├── retriever.py                      # Weaviate + 图查询封装
     ├── synthesizer.py                    # LLM 合成 6 段式
     ├── sse_emitter.py                    # 流式输出辅助
     └── prompts.py                        # prompt 模板 + few-shot
 
 alembic/versions/<id>_homepage_tables.py  # 5 张新表迁移
 scripts/
-├── ke_admin_create_project.py            # CLI: 添加新工程
-└── migrate_weaviate_project_id.py        # 给历史数据回填 project_id
+└── ke_admin_create_project.py            # CLI: 添加新工程（调主仓 pipeline）
 ```
 
 **修改：**
 ```
-src/service/api.py                        # 注册新 router；旧路由加 deprecated 头
-src/core/weaviate_defaults.py             # 4 个 collection schema 加 project_id
-src/knowledge/weaviate_*_store.py         # 写入时带 project_id；查询时过滤
-src/pipeline/run.py                       # 加 --project 参数
-src/pipeline/cli.py                       # 同上
+src/service/api.py                        # 注册 project_router、qa_router
 ```
+
+### 后端主仓新增/修改（`/Users/java/knowledge-engineering/`）
+
+**新增：**
+```
+scripts/
+└── migrate_weaviate_project_id.py        # 给历史数据回填 project_id（W7）
+```
+
+**修改：**
+```
+src/core/weaviate_defaults.py             # 4 个 collection schema 加 project_id（W7）
+src/knowledge/weaviate_*_store.py         # 写入时带 project_id；查询时过滤（W7）
+src/pipeline/run.py                       # 加 --project 参数（W7）
+src/pipeline/cli.py                       # 同上（W7）
+```
+
+> 业务术语词典 (`data/business_terms.yaml`) 和 gold doc 范例放 auth 仓 `data/` 下，跟 `qa_engine/prompts.py` 在一起（数据紧耦合代码）。
 
 ---
 
@@ -208,8 +221,8 @@ git commit -m "test: 引入 Vitest + smoke 测试"
 ### Task 1.2：后端 SQLAlchemy ORM 模型（5 张新表）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/db_models_homepage.py`
-- Create: `/Users/java/knowledge-engineering/tests/test_db_models_homepage.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/db_models_homepage.py`
+- Create: `/Users/java/knowledge-engineering-auth/tests/test_db_models_homepage.py`
 
 - [ ] **Step 1：写测试（验证 ORM 能正确建表）**
 
@@ -366,7 +379,7 @@ git commit -m "feat(db): 加 projects/qa_sessions/qa_messages/qa_feedback ORM �
 ### Task 1.3：alembic 迁移脚本
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/alembic/versions/<auto>_homepage_tables.py`
+- Create: `/Users/java/knowledge-engineering-auth/alembic/versions/<auto>_homepage_tables.py`
 
 - [ ] **Step 1：生成迁移**
 
@@ -561,8 +574,8 @@ W1 验收：
 ### Task 2.1：后端 Project Pydantic schemas
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/project_models.py`
-- Create: `/Users/java/knowledge-engineering/tests/test_project_models.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/project_models.py`
+- Create: `/Users/java/knowledge-engineering-auth/tests/test_project_models.py`
 
 - [ ] **Step 1：写 schema 测试**
 
@@ -664,9 +677,9 @@ git commit -m "feat(api): Project Pydantic schemas"
 ### Task 2.2：后端 `/api/projects` GET 路由
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/project_router.py`
-- Create: `/Users/java/knowledge-engineering/tests/test_project_router.py`
-- Modify: `/Users/java/knowledge-engineering/src/service/api.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/project_router.py`
+- Create: `/Users/java/knowledge-engineering-auth/tests/test_project_router.py`
+- Modify: `/Users/java/knowledge-engineering-auth/src/service/api.py`
 
 - [ ] **Step 1：写测试**
 
@@ -1294,9 +1307,9 @@ git commit -m "feat(ui): TopBar + 3 栏 AppLayout"
 ### Task 3.1：QA Engine retriever（Weaviate + 图查询封装）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/qa_engine/__init__.py`
-- Create: `/Users/java/knowledge-engineering/src/service/qa_engine/retriever.py`
-- Create: `/Users/java/knowledge-engineering/tests/test_qa_retriever.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/qa_engine/__init__.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/qa_engine/retriever.py`
+- Create: `/Users/java/knowledge-engineering-auth/tests/test_qa_retriever.py`
 
 - [ ] **Step 1：写测试（mock Weaviate）**
 
@@ -1410,7 +1423,7 @@ git commit -m "feat(qa): retriever 检索 BusinessInterpretation + 调用链"
 ### Task 3.2：QA Engine prompts（6 段式 prompt 模板）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/qa_engine/prompts.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/qa_engine/prompts.py`
 
 - [ ] **Step 1：实现 prompt 模板**
 
@@ -1510,8 +1523,8 @@ git commit -m "feat(qa): 6 段式 prompt 模板"
 ### Task 3.3：QA Engine synthesizer（LLM 调用 + JSON 解析）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/qa_engine/synthesizer.py`
-- Create: `/Users/java/knowledge-engineering/tests/test_qa_synthesizer.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/qa_engine/synthesizer.py`
+- Create: `/Users/java/knowledge-engineering-auth/tests/test_qa_synthesizer.py`
 
 - [ ] **Step 1：写测试**
 
@@ -1648,7 +1661,7 @@ git commit -m "feat(qa): synthesizer 调 LLM 合成 6 段式答案"
 ### Task 3.4：QA Engine 端到端集成测试（用真实 LLM）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/tests/test_qa_engine_e2e.py`（标记为 `@pytest.mark.e2e`，CI 跳过）
+- Create: `/Users/java/knowledge-engineering-auth/tests/test_qa_engine_e2e.py`（标记为 `@pytest.mark.e2e`，CI 跳过）
 
 - [ ] **Step 1：写 E2E 测试**
 
@@ -1721,8 +1734,8 @@ git commit -m "test(qa): 端到端 E2E 测试（标记 e2e，CI 跳过）"
 ### Task 4.1：后端 SSE emitter
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/qa_engine/sse_emitter.py`
-- Create: `/Users/java/knowledge-engineering/tests/test_sse_emitter.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/qa_engine/sse_emitter.py`
+- Create: `/Users/java/knowledge-engineering-auth/tests/test_sse_emitter.py`
 
 - [ ] **Step 1：实现 emitter（异步生成器）**
 
@@ -1863,8 +1876,8 @@ git commit -m "feat(qa): SSE emitter 异步流式输出"
 ### Task 4.2：后端 qa_router POST /qa/explain（SSE）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/src/service/qa_router.py`
-- Modify: `/Users/java/knowledge-engineering/src/service/api.py`
+- Create: `/Users/java/knowledge-engineering-auth/src/service/qa_router.py`
+- Modify: `/Users/java/knowledge-engineering-auth/src/service/api.py`
 
 - [ ] **Step 1：实现 router**
 
@@ -2603,8 +2616,8 @@ npm run dev
 ### Task 6.1：补充业务术语词典（100 条）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/data/business_terms.yaml`
-- Create: `/Users/java/knowledge-engineering/scripts/load_business_terms.py`
+- Create: `/Users/java/knowledge-engineering-auth/data/business_terms.yaml`
+- Create: `（改为 prompts.py 内 load_business_terms 函数；无独立脚本）`
 
 - [ ] **Step 1：建词典 YAML**
 
@@ -2670,7 +2683,7 @@ git commit -m "feat(qa): 业务术语词典 100 条 + 注入 prompt"
 ### Task 6.2：补充 gold doc 范例（30 篇 few-shot）
 
 **Files:**
-- Create: `/Users/java/knowledge-engineering/data/gold_docs/*.json`（30 篇示例输出）
+- Create: `/Users/java/knowledge-engineering-auth/data/gold_docs/*.json`（30 篇示例输出）
 - Modify: `src/service/qa_engine/prompts.py`（加 few-shot）
 
 - [ ] **Step 1：写 30 篇范例**
