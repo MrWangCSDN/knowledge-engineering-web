@@ -6,7 +6,7 @@ export function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-black p-4 lg:p-8">
 
       {/* ── 居中卡片 ── */}
-      <div className="w-full max-w-5xl flex flex-col lg:flex-row rounded-2xl overflow-hidden shadow-2xl">
+      <div className="w-full max-w-5xl flex flex-col lg:flex-row rounded-2xl overflow-hidden shadow-2xl min-h-[66vh]">
         {/* 左侧品牌区 */}
         <BrandPanel />
 

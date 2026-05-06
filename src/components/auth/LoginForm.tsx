@@ -257,10 +257,14 @@ export function LoginForm() {
         // 429 Too Many Requests：触发了后端的请求速率限制
         setPhase('error_rate_limit')
         setErrMsg('请求过于频繁，请稍后再试')
+      } else if (status === 422) {
+        // 422 Unprocessable Entity：请求格式正确但字段校验失败（如密码太短）
+        setPhase('error_invalid')
+        setErrMsg('用户名或密码格式不正确')
       } else if (status !== undefined && status >= 500) {
         // 5xx：服务器内部错误（500 Internal Server Error、502 Bad Gateway、503 等）
         setPhase('error_server')
-        setErrMsg('服务器错误，请联系管理员或稍后再试')
+        setErrMsg(`服务器错误（${status}），请联系管理员或稍后再试`)
       } else {
         // status 为 undefined：没有收到 HTTP 响应
         //   常见原因：网络断开、DNS 解析失败、CORS 预检被拒、请求超时

@@ -100,19 +100,19 @@ export function BrandPanel() {
           src="/logo.png"
           alt="Knowledge Engineering Logo"
           draggable={false}
-          className="h-12 lg:h-36 w-auto select-none"
+          className="h-12 lg:h-25 w-auto select-none"
           onLoad={onImageLoad}
         />
         <img
           src="/brand-text.png"
           alt="Knowledge Engineering"
           draggable={false}
-          className="h-12 lg:h-36 w-auto select-none mix-blend-lighten"
+          className="h-12 lg:h-25 w-auto select-none mix-blend-lighten"
           onLoad={onImageLoad}
         />
       </div>
 
-      <p className="mt-4 lg:mt-1 lg:ml-1 text-sm lg:text-[3.05rem] font-semibold tracking-tight text-white select-none inline-block bg-white/8 backdrop-blur-sm px-4 lg:px-6 py-1 lg:py-2 rounded-lg">
+      <p className="mt-4 lg:mt-1 lg:ml-1 text-sm lg:text-[2.05rem] font-semibold tracking-tight text-white select-none inline-block bg-white/8 backdrop-blur-sm px-4 lg:px-6 py-1 lg:py-2 rounded-lg">
         企业级 代码知识工程
       </p>
 
