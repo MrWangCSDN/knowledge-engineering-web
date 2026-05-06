@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react'
 import { BrandPanel } from '@/components/auth/BrandPanel'
 import { LoginForm } from '@/components/auth/LoginForm'
 import {
@@ -14,8 +15,23 @@ import {
 } from 'lucide-react'
 
 export function LoginPage() {
+  // ─── 整页加载追踪 ────────────────────────────────────────────────────────────
+  // 思路：等 BrandPanel 内 3 张关键图（logo / brand-text / skyline）全部加载完，
+  //       整个登录页（淡黄背景 + 装饰图标 + 卡片 + 表单 + 页脚）一次性淡入。
+  //       否则慢网下会先看到淡黄背景 + 右侧表单，左侧 panel 才出现，体验割裂。
+  // BrandPanel 通过 onImageLoad 回调每加载一张就触发一次计数。
+  const [loadedCount, setLoadedCount] = useState(0)
+  const onImageLoad = useCallback(() => setLoadedCount(n => n + 1), [])
+  const ready = loadedCount >= 3
+
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center bg-amber-50 p-4 lg:p-8 overflow-hidden">
+    <div
+      className="relative min-h-screen flex flex-col items-center justify-center bg-amber-50 p-4 lg:p-8 overflow-hidden"
+      style={{
+        opacity: ready ? 1 : 0,
+        transition: 'opacity 0.5s ease-out',
+      }}
+    >
 
       {/* ── 装饰性背景图标层（位于卡片下方，pointer-events-none 不挡交互）──
         图标分四类主题对应 "代码知识工程" 的核心概念：
@@ -64,8 +80,8 @@ export function LoginPage() {
 
       {/* ── 居中卡片 ── */}
       <div className="relative w-full max-w-5xl flex flex-col lg:flex-row rounded-2xl overflow-hidden shadow-2xl min-h-[66vh]">
-        {/* 左侧品牌区 */}
-        <BrandPanel />
+        {/* 左侧品牌区：把图加载回调上传，三张图都加载完整页一起淡入 */}
+        <BrandPanel onImageLoad={onImageLoad} />
 
         {/* 右侧表单区 */}
         <main className="flex-1 flex items-center justify-center p-8 lg:p-14 bg-background">

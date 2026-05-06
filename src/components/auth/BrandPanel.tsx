@@ -25,15 +25,17 @@
  *   "永远深色"：light / dark 主题切换不影响 brand 面板
  */
 
-import { useState, useCallback } from 'react'
+/**
+ * Props
+ *   onImageLoad: 每张关键图加载完成时回调一次（共 3 张：logo / brand-text / skyline）
+ *                由父组件 LoginPage 统一计数，达到 3 后整页一起淡入。
+ *                Optional：未传时也能正常渲染（向后兼容）。
+ */
+interface BrandPanelProps {
+  onImageLoad?: () => void
+}
 
-export function BrandPanel() {
-  const [loadedCount, setLoadedCount] = useState(0)
-  const onImageLoad = useCallback(() => setLoadedCount(n => n + 1), [])
-  // 等待 3 张图全部加载：logo.png + brand-text.png + skyline.jpg
-  // 配合 index.html 的 <link rel="preload"> 三张图并行预取，慢网下也能整齐显示
-  const allLoaded = loadedCount >= 3
-
+export function BrandPanel({ onImageLoad }: BrandPanelProps) {
   return (
     <aside
       className="
@@ -42,10 +44,6 @@ export function BrandPanel() {
         w-full lg:w-[45%] flex-shrink-0
         min-h-[200px] p-8 lg:p-12
       "
-      style={{
-        opacity: allLoaded ? 1 : 0,
-        transition: 'opacity 0.5s ease-out',
-      }}
     >
       {/* ── 点阵背景 ── */}
       <div
