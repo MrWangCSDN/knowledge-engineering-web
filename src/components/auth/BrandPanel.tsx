@@ -26,10 +26,6 @@
  */
 
 import { useState, useCallback } from 'react'
-import {
-  Cpu, Terminal, GitBranch, Database, Network,
-  Braces, FileCode2, Server, Layers, Workflow,
-} from 'lucide-react'
 
 export function BrandPanel() {
   const [loadedCount, setLoadedCount] = useState(0)
@@ -76,18 +72,28 @@ export function BrandPanel() {
         ))}
       </div>
 
-      {/* ── 科技感背景图标层（pointer-events-none 避免遮挡交互） ── */}
-      <div className="brand-bg-layer pointer-events-none select-none absolute inset-0" aria-hidden>
-        <Cpu        className="absolute top-[8%]   right-[12%] w-28 h-28 text-[var(--brand-cyan)] opacity-[0.07] rotate-12" />
-        <Terminal   className="absolute top-[22%]  right-[5%]  w-20 h-20 text-[var(--brand-cyan)] opacity-[0.06] -rotate-6" />
-        <Braces     className="absolute top-[38%]  right-[18%] w-24 h-24 text-white              opacity-[0.05] rotate-3" />
-        <GitBranch  className="absolute top-[55%]  right-[8%]  w-32 h-32 text-[var(--brand-cyan)] opacity-[0.07] rotate-6" />
-        <Network    className="absolute top-[70%]  right-[20%] w-20 h-20 text-white              opacity-[0.05] -rotate-12" />
-        <Database   className="absolute bottom-[8%] right-[10%] w-24 h-24 text-[var(--brand-cyan)] opacity-[0.06] rotate-6" />
-        <FileCode2  className="absolute top-[15%]  left-[55%]  w-16 h-16 text-white              opacity-[0.04] rotate-12" />
-        <Server     className="absolute bottom-[22%] left-[60%] w-20 h-20 text-[var(--brand-cyan)] opacity-[0.05] -rotate-3" />
-        <Layers     className="absolute bottom-[40%] right-[3%] w-16 h-16 text-white              opacity-[0.04] rotate-6" />
-        <Workflow   className="absolute bottom-[5%]  left-[40%] w-28 h-28 text-[var(--brand-cyan)] opacity-[0.06] -rotate-6" />
+      {/* ── 城市天际线照片（裁掉天空段，只显示楼宇） ──
+        关键：5.jpg 上半是亮蓝天空，与 panel 深蓝直接拼接会产生色差带。
+        解决：用容器+ object-cover object-bottom，只显示图片底部 50% 范围（楼宇区）。
+        - 容器高度 50%：限制图只占下半部
+        - img object-cover + object-bottom：图片按比例填充并锚定底部，裁掉天空
+        - 顶部 mask 渐隐：消除剩余的水平接缝
+        - opacity-40：让 panel 底色透上来 */}
+      <div
+        className="brand-bg-layer pointer-events-none select-none absolute bottom-0 left-0 w-full overflow-hidden"
+        aria-hidden
+        style={{
+          height: '50%',
+          maskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.7) 25%, black 55%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.7) 25%, black 55%)',
+        }}
+      >
+        <img
+          src="/skyline.jpg"
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-cover object-bottom opacity-40"
+        />
       </div>
       {/* ── Horizontal Lockup：logo 图标 + 品牌名文字 ─────────────────────────────
         flex 容器实现"图标左 + 文字右"的水平品牌组合：

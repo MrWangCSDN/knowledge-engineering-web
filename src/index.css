@@ -18,6 +18,28 @@
   animation: brand-bg-fade-in 0.6s ease-out 0.3s both;
 }
 
+/* ── 登录页背景图标动画 ──────────────────────────────────────────────────────
+   关键点：使用 CSS `translate` / `scale` 个体属性（而非 `transform` 简写）
+   这样不会覆盖 Tailwind 的 `rotate-12` 类（rotate 走 transform）。
+   三种节奏让图标错落浮动，整体氛围"轻微呼吸 + 缓慢漂移"。 */
+@keyframes icon-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -18px; }
+}
+@keyframes icon-drift {
+  0%, 100% { translate: 0 0; }
+  25%      { translate: 14px -10px; }
+  50%      { translate: 4px -20px; }
+  75%      { translate: -12px -12px; }
+}
+@keyframes icon-pulse {
+  0%, 100% { scale: 1; }
+  50%      { scale: 1.15; }
+}
+.icon-float { animation: icon-float 6s ease-in-out infinite; }
+.icon-drift { animation: icon-drift 10s ease-in-out infinite; }
+.icon-pulse { animation: icon-pulse 4s ease-in-out infinite; }
+
 /* ── BrandPanel 波纹动画 ── */
 @keyframes ripple {
   0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
