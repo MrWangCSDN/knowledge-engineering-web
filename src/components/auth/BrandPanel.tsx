@@ -100,10 +100,10 @@ export function BrandPanel({ onImageLoad }: BrandPanelProps) {
         flex 容器实现"图标左 + 文字右"的水平品牌组合：
           flex          → 横向排列
           items-center  → 子元素垂直居中（让 logo 与文字基线/中线对齐）
-          gap-3 lg:gap-5 → 元素间距：移动 12px / 桌面 20px
+          gap-1 lg:gap-2 → 元素间距：移动 4px / 桌面 8px（更紧凑）
           mt-[5vh] lg:mt-[8vh] → 整组品牌块向下偏移到合适位置
       */}
-      <div className="flex items-center gap-3 lg:gap-5 mt-[5vh] lg:mt-[8vh]">
+      <div className="flex items-center gap-0 mt-[5vh] lg:mt-[8vh]">
         <img
           src="/logo.png"
           alt="Knowledge Engineering Logo"
@@ -111,11 +111,12 @@ export function BrandPanel({ onImageLoad }: BrandPanelProps) {
           className="h-12 lg:h-25 w-auto select-none"
           onLoad={onImageLoad}
         />
+        {/* brand-text.png 图片自身左侧有内置空白，用 -ml 负边距把它向左拉近 logo */}
         <img
           src="/brand-text.png"
           alt="Knowledge Engineering"
           draggable={false}
-          className="h-12 lg:h-25 w-auto select-none mix-blend-lighten"
+          className="h-12 lg:h-25 w-auto select-none mix-blend-lighten -ml-3 lg:-ml-6"
           onLoad={onImageLoad}
         />
       </div>
