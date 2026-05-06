@@ -101,8 +101,9 @@ export function BrandPanel({ onImageLoad }: BrandPanelProps) {
           flex          → 横向排列
           items-center  → 子元素垂直居中（让 logo 与文字基线/中线对齐）
           gap-3 lg:gap-5 → 元素间距：移动 12px / 桌面 20px
+          mt-[5vh] lg:mt-[8vh] → 整组品牌块向下偏移到合适位置
       */}
-      <div className="flex items-center gap-3 lg:gap-5">
+      <div className="flex items-center gap-3 lg:gap-5 mt-[5vh] lg:mt-[8vh]">
         <img
           src="/logo.png"
           alt="Knowledge Engineering Logo"
@@ -123,8 +124,8 @@ export function BrandPanel({ onImageLoad }: BrandPanelProps) {
         企业级 代码知识工程
       </p>
 
-      {/* 价值主张句：字号退一级、字重轻、品牌青色半透明，与主副标形成层级 */}
-      <p className="mt-3 lg:mt-4 text-xs lg:text-lg font-light tracking-[0.15em] text-[var(--brand-cyan)] opacity-70 select-none">
+      {/* 价值主张句：字号退一级、字重加粗、品牌青色半透明，与主副标形成层级 */}
+      <p className="mt-3 lg:mt-4 text-xs lg:text-lg font-bold tracking-[0.15em] text-[var(--brand-cyan)] opacity-70 select-none">
         —让代码成为企业资产
       </p>
 
