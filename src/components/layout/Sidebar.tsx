@@ -11,8 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useThemeStore } from '@/store/theme'
 import { cn } from '@/lib/utils'
-// 引入用户菜单组件：展示当前登录账号信息，并提供登出入口
-import { UserMenu } from '@/components/auth/UserMenu'
+// UserMenu 已移到 TopBar；Sidebar 不再渲染（避免重复）。
 
 interface NavItem {
   to: string
@@ -37,15 +36,10 @@ export function Sidebar() {
   const analyzeItems = NAV_ITEMS.filter((it) => it.group === 'analyze')
 
   return (
-    <aside className="flex h-screen w-60 flex-col border-r bg-background">
-      <div className="px-4 py-5">
-        <h1 className="text-lg font-semibold tracking-tight">
-          knowledge-engineering
-        </h1>
-        <p className="mt-1 text-xs text-muted-foreground">代码知识工程 · Web</p>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto px-2 pb-4">
+    // 不再用 h-screen — AppLayout 用 flex flex-col 控制总高，Sidebar 跟着 body 自适应
+    // hidden lg:flex：窄屏隐藏（W5 会做汉堡菜单）
+    <aside className="hidden lg:flex w-60 flex-col border-r bg-background overflow-hidden">
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
         <NavGroup title="浏览">
           {browseItems.map((it) => (
             <NavItemLink key={it.to} item={it} />
@@ -59,16 +53,9 @@ export function Sidebar() {
         </NavGroup>
       </nav>
 
-      {/* Footer：用户菜单（账号信息 / 登出）+ 主题切换
-          用 space-y-1 让两个区块之间留出一点间距，视觉上不会粘连 */}
-      <div className="border-t p-2 space-y-1">
-        {/* 账号在上，主题在下：
-            账号信息（当前是谁登录的）层级比主题开关更重要，
-            用户切换账号的频率远高于切换主题，因此放在视线更自然落到的上方。
-            这是"高频 / 高优先级操作在前"的视觉层级原则。 */}
-        <UserMenu />
-
-        {/* 主题切换按钮保持原有逻辑不变，仅位置移到 UserMenu 之下 */}
+      {/* Footer：主题切换
+          UserMenu 已移到 TopBar，这里只剩主题切换。 */}
+      <div className="border-t p-2">
         <Button
           variant="ghost"
           size="sm"
