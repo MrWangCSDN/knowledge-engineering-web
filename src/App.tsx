@@ -58,9 +58,10 @@ export default function App() {
         {/* / —— 根据工程列表 redirect 到 /project/<first> 或显示空状态 */}
         <Route index element={<RootRedirect />} />
 
-        {/* 工程主页（聊天页） */}
+        {/* 工程主页（新对话） */}
         <Route path="/project/:projectId" element={<ChatPage />} />
-        {/* W5 加：/project/:projectId/chat/:sessionId */}
+        {/* 加载特定会话 */}
+        <Route path="/project/:projectId/chat/:sessionId" element={<ChatPage />} />
 
         {/* 旧首页保留作 fallback（未来逐步移除） */}
         <Route path="/legacy-home" element={<HomePage />} />
