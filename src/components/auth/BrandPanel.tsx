@@ -41,9 +41,8 @@ export function BrandPanel() {
       className="
         relative flex flex-col items-center overflow-hidden
         bg-[var(--brand-panel-bg)] text-[var(--brand-panel-fg)]
-        w-full lg:w-1/2
-        min-h-[180px] lg:min-h-screen
-        p-8 lg:p-16
+        w-full lg:w-[45%] flex-shrink-0
+        min-h-[200px] p-8 lg:p-12
       "
       style={{
         opacity: allLoaded ? 1 : 0,
@@ -122,43 +121,6 @@ export function BrandPanel() {
         —让代码成为企业资产
       </p>
 
-      {/* ── 底部版权栏：mt-auto 将其推到 aside 底部 ── */}
-      <footer className="mt-auto pt-8 w-full flex flex-col gap-1 items-center" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <div className="flex items-center gap-4 text-xs text-white/35">
-          <a
-            href="https://gwzx.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-white/70 transition-colors duration-200"
-          >
-            法律声明
-          </a>
-          <span className="text-white/20">·</span>
-          <a
-            href="/privacy"
-            className="hover:text-white/70 transition-colors duration-200"
-          >
-            隐私政策
-          </a>
-          <span className="text-white/20">·</span>
-          <a
-            href="mailto:contact@gwzx.com"
-            className="hover:text-white/70 transition-colors duration-200"
-          >
-            联系我们
-          </a>
-          <span className="text-white/20">·</span>
-          <a
-            href="mailto:hr@gwzx.com"
-            className="hover:text-white/70 transition-colors duration-200"
-          >
-            加入我们
-          </a>
-        </div>
-        <p className="text-xs text-white/25 select-none">
-          © gwzx.com 上海感物知行科技有限公司版权所有
-        </p>
-      </footer>
     </aside>
   )
 }
