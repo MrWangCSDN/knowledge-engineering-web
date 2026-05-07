@@ -1,20 +1,13 @@
 /**
  * src/components/chat/AssistantMessage.tsx
  *
- * AI 消息气泡（左对齐，占满宽度）。
+ * AI 消息 — 平铺式（无厚重边框卡片），左对齐。
+ * 段落之间用空行分隔；段标题用小字号灰色 prefix。
  *
- * v1（W5）：纯文本/markdown 兜底渲染。
- * W6：替换为 <SectionRenderer> 做 6 段式结构化渲染。
- *
- * 设计文档：[[首页设计]] §5.1 + §5.2
+ * v1（W5）：纯文本渲染。
+ * W6：替换为 SectionRenderer + react-markdown 做 6 段式结构化渲染。
  */
 import type { Message } from '@/types/chat'
-
-interface Props {
-  message: Message
-  /** 是否流式中（streamingMessage 传 true，会显示闪烁光标）。 */
-  streaming?: boolean
-}
 
 const SECTION_ICONS: Record<string, string> = {
   overview: '📋',
@@ -34,42 +27,47 @@ const SECTION_TITLES: Record<string, string> = {
   sources: '引用源',
 }
 
+interface Props {
+  message: Message
+  streaming?: boolean
+}
+
 export function AssistantMessage({ message, streaming = false }: Props) {
   const sections = message.sections ?? []
   const hasSections = sections.length > 0
 
   return (
-    <div className="my-3 px-1">
-      <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-        <span>🤖</span>
-        <span>KE</span>
-        {streaming && (
-          <span className="text-primary animate-pulse">正在思考…</span>
-        )}
+    <div className="my-6 group">
+      {/* 头：极小角标 + 思考状态 */}
+      <div className="flex items-center gap-1.5 mb-2 text-[12px] text-muted-foreground">
+        <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-foreground text-background text-[10px] font-semibold">
+          K
+        </span>
+        <span className="font-medium">KE</span>
+        {streaming && <span className="ml-1 animate-pulse">正在思考…</span>}
       </div>
 
-      {/* W5 简版：每段独立块，无 markdown 渲染（W6 接 react-markdown） */}
+      {/* 内容区：无 border + 平铺 */}
       {hasSections ? (
-        <div className="space-y-3">
+        <div className="space-y-5 text-[15px] leading-[1.7]">
           {sections.map((s, i) => {
             const icon = SECTION_ICONS[s.type] ?? '📌'
             const title = s.title || SECTION_TITLES[s.type] || s.type
             return (
-              <div key={i} className="border rounded-lg p-3 bg-card">
-                <div className="font-medium text-sm mb-2">
+              <div key={i}>
+                <h3 className="font-semibold text-[15px] mb-1.5 text-foreground">
                   {icon} {title}
-                </div>
-                <div className="text-sm whitespace-pre-wrap text-foreground/90">
+                </h3>
+                <div className="whitespace-pre-wrap text-foreground/85">
                   {s.content}
                   {streaming && i === sections.length - 1 && (
                     <span className="ml-0.5 animate-pulse">▌</span>
                   )}
                 </div>
                 {s.references && s.references.length > 0 && (
-                  <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
-                    引用：
+                  <div className="mt-2 text-[12.5px] text-muted-foreground">
                     {s.references.map((r, j) => (
-                      <span key={j} className="ml-1 text-primary">
+                      <span key={j} className="mr-2 underline-offset-2 hover:underline cursor-pointer">
                         {r.display_text}
                       </span>
                     ))}
@@ -80,17 +78,16 @@ export function AssistantMessage({ message, streaming = false }: Props) {
           })}
         </div>
       ) : (
-        // 没有 sections（错误降级 / 空答案）：展示 content
-        <div className="text-sm whitespace-pre-wrap">
+        <div className="text-[15px] leading-[1.7] whitespace-pre-wrap text-foreground/85">
           {message.content || (streaming ? '…' : '(空回答)')}
           {streaming && <span className="ml-0.5 animate-pulse">▌</span>}
         </div>
       )}
 
-      {/* metadata: 新鲜度（W7 的 FreshnessBadge 会替换） */}
-      {!streaming && message.metadata && (
-        <div className="mt-2 text-xs text-muted-foreground">
-          {message.metadata.latency_ms > 0 && `用时 ${(message.metadata.latency_ms / 1000).toFixed(1)}s`}
+      {/* metadata：极淡的小字 */}
+      {!streaming && message.metadata && (message.metadata.latency_ms > 0 || message.metadata.token_usage > 0) && (
+        <div className="mt-3 text-[11px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity">
+          {message.metadata.latency_ms > 0 && `${(message.metadata.latency_ms / 1000).toFixed(1)}s`}
           {message.metadata.token_usage > 0 && ` · ${message.metadata.token_usage} tokens`}
         </div>
       )}

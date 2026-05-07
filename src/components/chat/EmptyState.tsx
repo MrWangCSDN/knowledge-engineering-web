@@ -1,57 +1,81 @@
 /**
  * src/components/chat/EmptyState.tsx
  *
- * 空状态（无对话时）：
- *   - 工程统计欢迎语（共 X 方法 · 解读完成度 Y%）
- *   - 3 条可点击示例问题
+ * 空状态：极简居中欢迎语 + 居中输入框 + 小字示例 chips。
+ *
+ * 视觉对标 GPT 风格 —— 整体居中，留白多，没有厚重卡片。
  *
  * 设计文档：[[首页设计]] §3.2 状态 A
  */
 import type { Project } from '@/types/project'
-import { SuggestedQuestions } from './SuggestedQuestions'
+import { ChatInput } from './ChatInput'
 
 const SAMPLE_QUESTIONS = [
-  { icon: '💰', text: '存款开户的设计逻辑是怎样的？' },
-  { icon: '🏭', text: '产品工厂是怎么实现的？' },
-  { icon: '🔀', text: 'OrderService 的调用链路' },
+  '存款开户的设计逻辑',
+  '产品工厂是怎么实现的',
+  'OrderService 的调用链路',
 ]
 
 interface Props {
   project: Project
-  onSelectQuestion: (text: string) => void
+  onSend: (text: string) => void
+  loading?: boolean
+  onAbort?: () => void
 }
 
-export function EmptyState({ project, onSelectQuestion }: Props) {
+export function EmptyState({ project, onSend, loading, onAbort }: Props) {
   return (
-    <div className="max-w-3xl mx-auto py-12 px-4 text-center">
-      <h2 className="text-2xl font-semibold">
-        👋 你好，正在分析 [{project.name}]
-      </h2>
-      <p className="text-muted-foreground mt-2 text-sm">
-        共 <strong>{project.stats.methods_count}</strong> 个方法 ·
-        解读完成度 <strong>{project.stats.interpretation_progress}%</strong>
-      </p>
-      {project.pipeline_at && (
-        <p className="text-xs text-muted-foreground mt-1">
-          最新于 {formatRelativeTime(project.pipeline_at)}
+    // 跟随 GPT 风格：内容靠上而不是垂直居中
+    // pt-[22vh] 让欢迎语 + 输入框落在屏幕上 1/3 处
+    <div className="h-full flex flex-col items-center px-4 pt-[22vh]">
+      <div className="w-full max-w-3xl flex flex-col items-center">
+        {/* 欢迎语：3xl + medium，跟 GPT 同档 */}
+        <h1 className="text-[28px] md:text-[32px] font-medium tracking-tight text-foreground text-center mb-7 leading-tight">
+          准备好了，随时问我
+        </h1>
+
+        {/* 居中输入框 */}
+        <div className="w-full">
+          <ChatInput
+            onSend={onSend}
+            loading={loading}
+            onAbort={onAbort}
+            placeholder={`关于 [${project.name}] 你想了解什么？`}
+            large
+          />
+        </div>
+
+        {/* 工程统计：极小一行（不抢眼） */}
+        <p className="mt-4 text-[13px] text-muted-foreground/80 text-center">
+          正在分析 <span className="font-medium text-foreground/80">{project.name}</span>
+          {' · '}
+          {project.stats.methods_count} 方法
+          {' · '}
+          解读 {project.stats.interpretation_progress}%
         </p>
-      )}
 
-      <div className="my-8 text-sm text-muted-foreground">─── 试试问问看 ───</div>
-
-      <SuggestedQuestions questions={SAMPLE_QUESTIONS} onSelect={onSelectQuestion} />
+        {/* 示例 chips：横向小胶囊 */}
+        <div className="mt-6 flex flex-wrap gap-2 justify-center">
+          {SAMPLE_QUESTIONS.map((q, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSend(q)}
+              disabled={loading}
+              className="
+                px-3.5 py-1.5 rounded-full text-[13px]
+                border bg-background
+                text-foreground/70 hover:text-foreground
+                hover:bg-muted hover:border-foreground/20
+                disabled:opacity-50 disabled:cursor-not-allowed
+                transition-colors
+              "
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
-}
-
-/** 简单的"几小时前 / 几天前"显示。完整 dayjs/date-fns 留 W6 再加。 */
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60_000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前`
-  const days = Math.floor(hours / 24)
-  return `${days} 天前`
 }

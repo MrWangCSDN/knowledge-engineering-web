@@ -1,23 +1,33 @@
 /**
  * src/components/chat/ChatInput.tsx
  *
- * 底部输入框：
- *   - Enter 发送，Shift+Enter 换行
- *   - 中文 IME composition 期间不触发提交
- *   - 多行自适应（最多 6 行，超出滚动）
- *   - disabled / loading 状态时按钮变样（W5 加 ⏸ 停止）
+ * 胶囊形输入框 — GPT 风格。
+ *
+ * 视觉：
+ *  - 整体圆角胶囊（rounded-3xl），白底 + 微阴影 + 微边框
+ *  - 左侧 + 按钮（v2 文件附件占位）
+ *  - 中间多行 textarea（占满）
+ *  - 右侧操作组：语音占位 + 发送按钮（有内容才显示，无内容时显示麦克风）
+ *  - 焦点态加深阴影
+ *
+ * 交互：
+ *  - Enter 发送；Shift+Enter 换行
+ *  - 中文 IME composition 期间不触发提交
+ *  - 多行自适应（最多 6 行）
+ *  - loading 时按钮变 ⏸ 停止
  *
  * 设计文档：[[首页设计]] §3.8
  */
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
-import { ArrowUp, Square } from 'lucide-react'
+import { ArrowUp, Plus, Square, Mic } from 'lucide-react'
 
 interface Props {
   onSend: (text: string) => void
-  /** 等答案中：disabled + 按钮变 ⏸（v1 仅显示，停止逻辑 W5 接 abort）。 */
   loading?: boolean
   onAbort?: () => void
   placeholder?: string
+  /** 是否在空状态（占主区中央时为 true，会用更大的字号/padding）。 */
+  large?: boolean
 }
 
 const MAX_LINES = 6
@@ -27,19 +37,20 @@ export function ChatInput({
   onSend,
   loading = false,
   onAbort,
-  placeholder = '输入你的问题...',
+  placeholder = '有问题，尽管问',
+  large = false,
 }: Props) {
   const [value, setValue] = useState('')
   const [composing, setComposing] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
 
-  // 自适应高度：根据内容自动调整 rows
+  // 自适应高度
   useEffect(() => {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    const lineHeight = parseInt(getComputedStyle(el).lineHeight || '20', 10)
-    const maxHeight = lineHeight * MAX_LINES + 24  // padding
+    const lineHeight = parseInt(getComputedStyle(el).lineHeight || '24', 10)
+    const maxHeight = lineHeight * MAX_LINES
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`
   }, [value])
 
@@ -51,7 +62,6 @@ export function ChatInput({
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // 中文输入法 composing 期间 Enter 是确认候选词，不触发提交
     if (composing) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -59,11 +69,37 @@ export function ChatInput({
     }
   }
 
-  const charCount = value.length
+  const hasText = value.trim().length > 0
 
   return (
-    <div className="max-w-3xl mx-auto w-full">
-      <div className="flex gap-2 items-end">
+    <div className="w-full max-w-3xl mx-auto">
+      <div
+        className={`
+          flex items-end gap-1.5 px-3 ${large ? 'py-3' : 'py-2'}
+          rounded-3xl border bg-background
+          shadow-[0_2px_12px_rgba(0,0,0,0.06)]
+          focus-within:shadow-[0_4px_24px_rgba(0,0,0,0.10)]
+          focus-within:border-foreground/20
+          transition-shadow
+        `}
+      >
+        {/* 左侧 + 按钮（文件附件，v2） */}
+        <button
+          type="button"
+          aria-label="附件"
+          title="附件（v1.5 上线）"
+          disabled
+          className="
+            shrink-0 h-8 w-8 rounded-full
+            text-muted-foreground hover:bg-muted disabled:opacity-50
+            flex items-center justify-center
+            transition-colors
+          "
+        >
+          <Plus className="h-5 w-5" />
+        </button>
+
+        {/* 中间 textarea */}
         <textarea
           ref={ref}
           value={value}
@@ -74,40 +110,61 @@ export function ChatInput({
           placeholder={placeholder}
           disabled={loading}
           rows={1}
-          className="
-            flex-1 px-3 py-2.5 border rounded-lg resize-none
-            bg-background text-sm
+          className={`
+            flex-1 bg-transparent resize-none outline-none border-0
+            ${large ? 'text-[16px] py-1.5 leading-6' : 'text-[15px] py-1 leading-6'}
+            text-foreground
+            placeholder:text-muted-foreground/70
             disabled:opacity-50
-            focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
-            placeholder:text-muted-foreground
-          "
+          `}
         />
-        <button
-          type="button"
-          onClick={loading ? onAbort : submit}
-          disabled={!loading && !value.trim()}
-          aria-label={loading ? '停止' : '发送'}
-          className="
-            shrink-0 h-10 w-10 rounded-lg
-            bg-primary text-primary-foreground
-            disabled:opacity-40 disabled:cursor-not-allowed
-            hover:bg-primary/90 transition-colors
-            flex items-center justify-center
-          "
-        >
-          {loading ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" />}
-        </button>
+
+        {/* 右侧操作组 */}
+        <div className="shrink-0 flex items-center gap-1">
+          {!hasText && !loading && (
+            <button
+              type="button"
+              aria-label="语音输入"
+              title="语音输入（v1.5 上线）"
+              disabled
+              className="
+                h-8 w-8 rounded-full
+                text-muted-foreground hover:bg-muted disabled:opacity-50
+                flex items-center justify-center
+                transition-colors
+              "
+            >
+              <Mic className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={loading ? onAbort : submit}
+            disabled={!loading && !hasText}
+            aria-label={loading ? '停止' : '发送'}
+            className={`
+              h-8 w-8 rounded-full
+              flex items-center justify-center
+              transition-all
+              ${loading
+                ? 'bg-foreground text-background hover:bg-foreground/90'
+                : hasText
+                  ? 'bg-foreground text-background hover:bg-foreground/90 scale-100'
+                  : 'bg-muted text-muted-foreground/50 scale-95 cursor-not-allowed'
+              }
+            `}
+          >
+            {loading
+              ? <Square className="h-3 w-3 fill-current" />
+              : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
+          </button>
+        </div>
       </div>
-      <div className="flex justify-between items-center mt-1 px-1">
-        <span className="text-xs text-muted-foreground">
-          Enter 发送，Shift+Enter 换行
-        </span>
-        {charCount > 0 && (
-          <span className={`text-xs ${charCount > MAX_LENGTH * 0.9 ? 'text-orange-500' : 'text-muted-foreground'}`}>
-            {charCount}/{MAX_LENGTH}
-          </span>
-        )}
-      </div>
+
+      {/* 底部提示：超小字号 + 极淡灰 */}
+      <p className="text-center text-[11px] text-muted-foreground/50 mt-2">
+        Enter 发送 · Shift+Enter 换行
+      </p>
     </div>
   )
 }

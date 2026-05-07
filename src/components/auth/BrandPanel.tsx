@@ -108,15 +108,16 @@ export function BrandPanel({ onImageLoad }: BrandPanelProps) {
           src="/logo.png"
           alt="Knowledge Engineering Logo"
           draggable={false}
-          className="h-12 lg:h-25 w-auto select-none"
+          className="h-16 lg:h-32 w-auto select-none"
           onLoad={onImageLoad}
         />
-        {/* brand-text.png 图片自身左侧有内置空白，用 -ml 负边距把它向左拉近 logo */}
+        {/* chatKE 文字图（深色背景已 PIL 处理为透明 alpha；mix-blend-lighten 让边缘
+            的微弱压缩噪点也融进 panel 深蓝底色） */}
         <img
-          src="/brand-text.png"
-          alt="Knowledge Engineering"
+          src="/chatke-text.png"
+          alt="chatKE"
           draggable={false}
-          className="h-12 lg:h-25 w-auto select-none mix-blend-lighten -ml-3 lg:-ml-6"
+          className="h-16 lg:h-32 w-auto select-none mix-blend-lighten -ml-3 lg:-ml-6"
           onLoad={onImageLoad}
         />
       </div>

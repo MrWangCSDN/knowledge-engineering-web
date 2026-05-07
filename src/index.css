@@ -96,38 +96,42 @@
 }
 
 /* ──────────────── shadcn/ui design tokens（暗色） ──────────────── */
+/* 暗色主题字体颜色：跟随主流深色 UI 主体文字接近纯白
+   - bg ≈ oklch(0.245)（≈ #212121）
+   - fg ≈ oklch(0.985)（≈ #FAFAFA，主体文字几乎纯白）
+   - muted-fg ≈ oklch(0.74)（≈ #BABABA，辅助文字仍清晰可读） */
 .dark {
   /* BrandPanel token：与亮色主题相同——brand 面板始终保持深色外观，匹配 logo 背景 */
   --brand-panel-bg: #0c1925;
   --brand-panel-fg: oklch(1 0 0);
   --brand-cyan: #22c8d0;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  --background: oklch(0.245 0 0);    /* ≈ #212121 */
+  --foreground: oklch(1 0 0);        /* 纯白 #FFFFFF (rgb 255,255,255) */
 
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --card: oklch(0.245 0 0);
+  --card-foreground: oklch(1 0 0);
 
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.27 0 0);
+  --popover-foreground: oklch(1 0 0);
 
   --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.245 0 0);
 
-  --secondary: oklch(0.269 0 0);
+  --secondary: oklch(0.32 0 0);
   --secondary-foreground: oklch(0.985 0 0);
 
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted: oklch(0.32 0 0);
+  --muted-foreground: oklch(0.74 0 0);  /* ≈ #BABABA，比 0.66 亮一档 */
 
-  --accent: oklch(0.269 0 0);
+  --accent: oklch(0.32 0 0);
   --accent-foreground: oklch(0.985 0 0);
 
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.556 0 0);
 }
 

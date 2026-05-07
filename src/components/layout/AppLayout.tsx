@@ -1,18 +1,19 @@
 import { useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 
-import { TopBar } from '@/components/layout/TopBar'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { MainHeader } from '@/components/layout/MainHeader'
 import { useProjectStore } from '@/store/projects'
 
 /**
- * 应用整体布局：顶栏 + 左侧导航 + 右侧路由内容（3 栏结构）。
+ * 应用整体布局：左右两栏。
  *
- * 顶栏（56px）：logo · 工程选择器 · 通知 · 用户菜单
- * 左栏（240-280px）：现有导航（W5 会替换为会话历史）
- * 右栏：<Outlet /> 渲染当前路由页面
+ * 不再有全局 TopBar —— 改成 ChatGPT 风格：
+ *  - Sidebar 全高，自己头部放 logo + 折叠按钮
+ *  - Main 全高，自己头部放工程选择器 (左) + 用户菜单 (右)
+ *  - 两栏各自管自己的滚动
  *
- * 挂载时拉工程列表（顶栏选择器需要）。
+ * 挂载时拉工程列表（Main header 选择器要用）。
  */
 export function AppLayout() {
   const fetchProjects = useProjectStore(s => s.fetchProjects)
@@ -22,16 +23,12 @@ export function AppLayout() {
   }, [fetchProjects])
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
-      <TopBar />
-      <div className="flex-1 flex overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl p-6">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      <Sidebar />
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <MainHeader />
+        <Outlet />
+      </main>
     </div>
   )
 }

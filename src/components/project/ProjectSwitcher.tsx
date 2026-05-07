@@ -49,14 +49,14 @@ export function ProjectSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger
         className="
-          inline-flex items-center gap-1.5 px-3 py-2 rounded
-          text-sm font-medium hover:bg-muted transition-colors
+          inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+          text-[15px] font-medium text-foreground hover:bg-muted transition-colors
           focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
         "
       >
-        <FolderClosed className="h-4 w-4" />
-        <span className="truncate max-w-[180px]">{current.name}</span>
-        <ChevronDown className="h-4 w-4 opacity-50" />
+        <FolderClosed className="h-[18px] w-[18px]" />
+        <span className="truncate max-w-[200px]">{current.name}</span>
+        <ChevronDown className="h-4 w-4 opacity-60" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent className="w-[360px]" align="start">
