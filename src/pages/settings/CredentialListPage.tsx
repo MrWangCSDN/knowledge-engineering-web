@@ -1,23 +1,33 @@
 /**
  * src/pages/settings/CredentialListPage.tsx
  *
- * 凭证管理页 — 列出所有 Git PAT 凭证 + 新增 + 删除。
+ * 凭证管理页（v2 user-scoped）— 列出当前用户自己的凭证 + 新增 + 删除。
+ * Admin 用户底部额外有"所有凭证审计"Tab（listAllCredentials 视图）。
  *
- * 设计文档：[[仓库管理-设计]] §7
+ * 设计文档：[[仓库管理-设计]] §7 / [[credentials-设计]]
  */
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Key } from 'lucide-react'
+import { Plus, Trash2, Key, ShieldCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
-  listAllCredentials as listCredentials,
-  deleteAnyCredential as deleteCredential,
+  listMyCredentials,
+  deleteMyCredential,
+  listAllCredentials,
+  deleteAnyCredential,
 } from '@/api/credentials'
-import type { MyCredential as Credential } from '@/types/credential'
+import type { MyCredential } from '@/types/credential'
+import { useAuthStore } from '@/store/auth'
 import { AddCredentialDialog } from './AddCredentialDialog'
 
+type TabId = 'mine' | 'all'
+
 export function CredentialListPage() {
-  const [credentials, setCredentials] = useState<Credential[]>([])
+  const user = useAuthStore(s => s.user)
+  const isAdmin = user?.is_admin ?? false
+
+  const [tab, setTab] = useState<TabId>('mine')
+  const [credentials, setCredentials] = useState<MyCredential[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -27,7 +37,8 @@ export function CredentialListPage() {
     setLoading(true)
     setError(null)
     try {
-      setCredentials(await listCredentials())
+      const data = tab === 'all' ? await listAllCredentials() : await listMyCredentials()
+      setCredentials(data)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -37,13 +48,22 @@ export function CredentialListPage() {
 
   useEffect(() => {
     void refresh()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   const onDelete = async (id: string, name: string) => {
-    if (!confirm(`确定删除凭证「${name}」？\n关联工程会变成"无凭证"状态，私有仓将无法同步。`)) return
+    const msg =
+      tab === 'all'
+        ? `确定强制删除凭证「${name}」？\n（Admin 操作：关联工程将无法同步）`
+        : `确定删除凭证「${name}」？\n关联工程会变成"无凭证"状态，私有仓将无法同步。`
+    if (!confirm(msg)) return
     setDeleting(id)
     try {
-      await deleteCredential(id)
+      if (tab === 'all') {
+        await deleteAnyCredential(id)
+      } else {
+        await deleteMyCredential(id)
+      }
       await refresh()
     } catch (e) {
       alert(`删除失败：${(e as Error).message}`)
@@ -56,20 +76,52 @@ export function CredentialListPage() {
     <div className="max-w-4xl mx-auto px-6 py-8">
       <header className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold">凭证管理</h1>
+          <h1 className="text-2xl font-semibold">我的凭证</h1>
           <p className="mt-1 text-[14px] text-muted-foreground">
             管理 Git Personal Access Token；明文 token 用 Fernet 加密存储，UI 只展示末 4 位。
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="shrink-0">
-          <Plus className="h-4 w-4 mr-1" />
-          新增凭证
-        </Button>
+        {tab === 'mine' && (
+          <Button onClick={() => setAddOpen(true)} className="shrink-0">
+            <Plus className="h-4 w-4 mr-1" />
+            新增凭证
+          </Button>
+        )}
       </header>
+
+      {/* Admin 用户显示 Tab 切换 */}
+      {isAdmin && (
+        <div className="flex gap-1 mb-5 p-1 bg-muted/50 rounded-lg w-fit">
+          <button
+            type="button"
+            onClick={() => setTab('mine')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+              tab === 'mine'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Key className="h-3.5 w-3.5" />
+            我的凭证
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('all')}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+              tab === 'all'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+            所有凭证审计
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 px-4 py-3 border border-destructive/30 bg-destructive/10 text-destructive text-sm rounded-lg">
-          ❌ {error}
+          加载失败：{error}
         </div>
       )}
 
@@ -88,8 +140,12 @@ export function CredentialListPage() {
         ) : credentials.length === 0 ? (
           <div className="px-4 py-12 text-center">
             <Key className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm text-muted-foreground">还没有凭证</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">点击右上角"新增凭证"添加 Git PAT</p>
+            <p className="text-sm text-muted-foreground">
+              {tab === 'all' ? '系统暂无凭证' : '还没有凭证'}
+            </p>
+            {tab === 'mine' && (
+              <p className="text-xs text-muted-foreground/70 mt-1">点击右上角"新增凭证"添加 Git PAT</p>
+            )}
           </div>
         ) : (
           credentials.map(c => (
