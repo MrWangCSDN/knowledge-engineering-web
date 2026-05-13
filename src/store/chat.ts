@@ -30,6 +30,7 @@ import type {
   SectionType,
   Reference,
   MessageMetadata,
+  ToolCallPayload,
 } from '@/types/chat'
 import type { Session } from '@/types/session'
 
@@ -232,9 +233,49 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   role: 'assistant',
                   content: '',
                   sections: [],
+                  tool_calls: {},  // v1.3 ReAct：累积 tool 调用
                   created_at: new Date().toISOString(),
                 },
                 currentSessionId: metaSessionId,
+              })
+              break
+            }
+            case 'tool_call': {
+              // v1.3 ReAct 事件：LLM 调工具 starting / complete 各发一次
+              const payload = data as unknown as ToolCallPayload
+              set(s => {
+                if (!s.streamingMessage) return s
+                const tcs = { ...(s.streamingMessage.tool_calls || {}) }
+                const existing = tcs[payload.id] || { starting: payload }
+                // phase='starting' → 占位 / phase='complete' → 补上结果
+                if (payload.phase === 'starting') {
+                  tcs[payload.id] = { ...existing, starting: payload }
+                } else {
+                  tcs[payload.id] = { ...existing, complete: payload }
+                }
+                return {
+                  streamingMessage: {
+                    ...s.streamingMessage,
+                    tool_calls: tcs,
+                  },
+                }
+              })
+              break
+            }
+            case 'token': {
+              // v1.6：LLM 流式 token chunk
+              // 累计到 raw_stream；UI 用它显示打字机效果
+              // 一旦 section_start / content 开始流入，UI 会切回结构化展示
+              const delta = (data.delta as string) ?? ''
+              if (!delta) break
+              set(s => {
+                if (!s.streamingMessage) return s
+                return {
+                  streamingMessage: {
+                    ...s.streamingMessage,
+                    raw_stream: (s.streamingMessage.raw_stream || '') + delta,
+                  },
+                }
               })
               break
             }

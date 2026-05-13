@@ -85,6 +85,18 @@ export interface Message {
   content: string
   sections?: Section[]
   metadata?: MessageMetadata
+  /**
+   * v1.3 ReAct：LLM 在本条 assistant 消息生成过程中调用的工具列表。
+   * Map(id → {starting, complete?})，前端用 ToolCallCard 渲染。
+   * 使用 Record 替代 Map 方便 JSON 序列化（持久化时直接用）。
+   */
+  tool_calls?: Record<string, { starting: ToolCallPayload; complete?: ToolCallPayload }>
+  /**
+   * v1.6：LLM 流式输出的"原始 token 累计"。
+   * 仅在 streaming 期间存在；流末解析出 sections 后 UI 不再显示这个字段。
+   * 用 ChatGPT 同款打字机效果展示。
+   */
+  raw_stream?: string
   /** ISO 8601。 */
   created_at: string
 }
@@ -103,6 +115,8 @@ export type SSEEventType =
   | 'section_done'   // 一段结束（含 references）
   | 'done'           // 整个回答完成
   | 'error'          // 出错
+  | 'tool_call'      // v1.3 ReAct：LLM 调工具前后各发一次
+  | 'token'          // v1.6：LLM 流式输出的单个 token chunk
 
 /**
  * SSE 事件通用包装。data 类型由具体 event 决定（见各事件 payload 类型）。
@@ -119,12 +133,43 @@ export interface MetaPayload {
   message_id: string
   plan_steps: string[]
   entry_points?: string[]
+  /** v1.1 路由决策：skill 名（business / dependency / data-flow / architecture）。 */
+  skill_id?: string
+  /** v1.1：路由来源 'keyword' | 'llm' | 'llm-fallback' | 'llm-error'。 */
+  route_source?: string
+  /** v1.1：关键词路径命中的具体词（用于 UI 解释"识别到 X / Y"）。 */
+  matched_keywords?: string[]
 }
 
 export interface StepPayload {
   /** searching / chain_extraction / synthesizing / etc. */
   phase: string
   desc: string
+}
+
+/**
+ * v1.3 ReAct tool_call 事件 payload。
+ * - phase='starting'：LLM 刚发出调用，没结果
+ * - phase='complete'：已经执行完，result_preview 是序列化的 dict 截断
+ */
+export interface ToolCallPayload {
+  phase: 'starting' | 'complete'
+  /** OpenAI 给的调用 id，用来配对 starting 和 complete。 */
+  id: string
+  /** 工具名，如 'ke_callees' / 'ke_search'。 */
+  name: string
+  /** phase==='starting' 时存在：LLM 传给工具的入参。 */
+  arguments?: Record<string, unknown>
+  /** phase==='complete' 时存在：工具返回的 JSON 字符串预览（前 600 字符）。 */
+  result_preview?: string
+}
+
+/**
+ * v1.6 LLM streaming token 事件 payload。
+ * 每个 LLM chunk 一条；store 累计到 streamingMessage.raw_stream。
+ */
+export interface TokenPayload {
+  delta: string
 }
 
 export interface SectionStartPayload {

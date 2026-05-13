@@ -139,7 +139,7 @@ export function Sidebar() {
 
       {/* ─── 底部：套餐 / 设置 / 帮助 + 主题 ─── */}
       <div className="border-t p-2 space-y-0.5">
-        <SidebarFooterLink to="/settings" icon={Settings} label="设置" disabled />
+        <SidebarFooterLink to="/settings" icon={Settings} label="设置" />
         <SidebarFooterLink to="/help" icon={HelpCircle} label="帮助" disabled />
         <Button
           variant="ghost"

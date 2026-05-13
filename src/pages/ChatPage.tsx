@@ -116,7 +116,7 @@ export function ChatPage() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} streaming={streamingMessage} />
+        <MessageList messages={messages} streaming={streamingMessage} projectId={projectId} />
       </div>
 
       {error && <ErrorBar message={error} />}
