@@ -1,15 +1,14 @@
 /**
  * src/components/session/SessionItem.tsx
  *
- * 单个会话条目。点击切到该会话；hover 显示删除按钮。
+ * 单个会话条目。点击切到该会话；hover 右侧「⋯」按钮打开 SessionMenu（归档 / 删除）。
  *
- * 设计文档：[[首页设计]] §3.4
+ * 设计文档：[[首页设计]] §3.4，[[会话归档-设计]] §8.1, §8.5
  */
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Trash2 } from 'lucide-react'
 
 import { useSessionStore } from '@/store/sessions'
+import { SessionMenu } from './SessionMenu'
 import type { Session } from '@/types/session'
 import type { Project } from '@/types/project'
 
@@ -21,30 +20,14 @@ interface Props {
 export function SessionItem({ session, project }: Props) {
   const navigate = useNavigate()
   const { sessionId: currentSessionId } = useParams<{ sessionId?: string }>()
+  const archive = useSessionStore(s => s.archiveSession)
   const deleteSession = useSessionStore(s => s.deleteSession)
-  const [confirming, setConfirming] = useState(false)
 
   const isActive = currentSessionId === session.id
 
   const onClick = () => {
     // 切到对应工程的对应会话
     navigate(`/project/${project.id}/chat/${session.id}`)
-  }
-
-  const onDelete = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!confirming) {
-      setConfirming(true)
-      // 3 秒后自动取消确认状态
-      setTimeout(() => setConfirming(false), 3000)
-      return
-    }
-    await deleteSession(project.id, session.id)
-    setConfirming(false)
-    // 如果删的是当前正在看的会话，跳回工程主页
-    if (isActive) {
-      navigate(`/project/${project.id}`)
-    }
   }
 
   return (
@@ -66,21 +49,30 @@ export function SessionItem({ session, project }: Props) {
         <span className="flex-1 truncate" title={session.title}>
           {session.title || '(无标题)'}
         </span>
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label={confirming ? '确认删除' : '删除'}
-          title={confirming ? '再次点击确认删除' : '删除'}
-          className={`
-            shrink-0 p-1 rounded
-            ${confirming
-              ? 'text-destructive opacity-100'
-              : 'opacity-0 group-hover:opacity-50 hover:opacity-100 hover:text-destructive'
+
+        {/* 替换旧 Trash 按钮 + 二次确认为 SessionMenu（设计 §8.1） */}
+        <SessionMenu
+          onArchive={async () => {
+            try {
+              await archive(project.id, session.id)
+              // 归档的是当前 active session → 跳回工程主页（设计 §8.5）
+              if (isActive) {
+                navigate(`/project/${project.id}`)
+              }
+            } catch {
+              // 失败时静默 — store 已保留状态；后续可加 toast
             }
-          `}
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
+          }}
+          onDelete={async () => {
+            if (!window.confirm('确认删除该对话？此操作不可恢复。')) return
+            try {
+              await deleteSession(project.id, session.id)
+              if (isActive) navigate(`/project/${project.id}`)
+            } catch {
+              // 静默
+            }
+          }}
+        />
       </div>
     </li>
   )
