@@ -10,15 +10,12 @@
  * 注：因为已经有 TopBar 的工程选择器作为切工程入口，
  *     侧栏只展示当前工程的会话即可（参考 ChatGPT，不做多项目分组）。
  */
-import { useEffect } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
 import { Edit, Search, Settings, HelpCircle, Moon, Sun, PanelLeft } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { useThemeStore } from '@/store/theme'
-import { useProjectStore } from '@/store/projects'
-import { useSessionStore } from '@/store/sessions'
-import { SessionItem } from '@/components/session/SessionItem'
+import { SessionHistoryGrouped } from '@/components/session/SessionHistoryGrouped'
 
 export function Sidebar() {
   const theme = useThemeStore(s => s.theme)
@@ -26,20 +23,7 @@ export function Sidebar() {
   const navigate = useNavigate()
   const { projectId } = useParams<{ projectId: string }>()
 
-  const projects = useProjectStore(s => s.projects)
-  const currentProject = projects.find(p => p.id === projectId)
-  const sessionsByProject = useSessionStore(s => s.sessionsByProject)
-  const fetchedProjects = useSessionStore(s => s.fetchedProjects)
-  const fetchSessions = useSessionStore(s => s.fetchSessions)
-
-  // 当前工程一切换就拉一次会话
-  useEffect(() => {
-    if (currentProject && !fetchedProjects.has(currentProject.id)) {
-      fetchSessions(currentProject.id)
-    }
-  }, [currentProject, fetchedProjects, fetchSessions])
-
-  const sessions = currentProject ? (sessionsByProject[currentProject.id] ?? []) : []
+  // sessions 拉取 / 排序 / 过滤都交给 SessionHistoryGrouped
 
   const goNewChat = () => {
     if (projectId) navigate(`/project/${projectId}`)
@@ -113,29 +97,8 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* ─── 会话历史（统一 15px + foreground） ─── */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-2">
-        {currentProject && (
-          <div className="px-3 pt-3 pb-1.5 text-[15px] font-medium text-foreground">
-            {currentProject.name} 的对话
-          </div>
-        )}
-        {!currentProject && (
-          <div className="px-3 py-4 text-[15px] text-foreground text-center">
-            请先在顶部选择工程
-          </div>
-        )}
-        <ul className="space-y-0.5">
-          {currentProject && sessions.length === 0 && (
-            <li className="px-3 py-2 text-[15px] text-foreground">
-              暂无对话
-            </li>
-          )}
-          {currentProject && sessions.map(s => (
-            <SessionItem key={s.id} session={s} project={currentProject} />
-          ))}
-        </ul>
-      </nav>
+      {/* ─── 会话历史（三层折叠树，v1.5）─── */}
+      <SessionHistoryGrouped />
 
       {/* ─── 底部：套餐 / 设置 / 帮助 + 主题 ─── */}
       <div className="border-t p-2 space-y-0.5">
