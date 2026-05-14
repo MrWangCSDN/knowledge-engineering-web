@@ -370,3 +370,66 @@ describe('AssistantMessage — Mermaid 集成', () => {
     expect(document.body.textContent).toContain('普通 markdown 内容')
   })
 })
+
+describe('AssistantMessage: chit-chat section', () => {
+  it('chit-chat 类型 section 不显示 h3 header (icon + title)', () => {
+    const message = {
+      id: 'm1',
+      session_id: 's1',
+      role: 'assistant' as const,
+      content: '',
+      sections: [{
+        type: 'chit-chat' as const,
+        title: '',
+        content: '你好！有什么业务问题可以问我。',
+        references: [],
+      }],
+      created_at: '2026-05-14T00:00:00Z',
+    }
+    render(<AssistantMessage message={message} />)
+
+    // h3 标题（含 icon + title 文字）不应出现
+    expect(screen.queryByText(/📋|📝|💬\s*业务概述|对话回复/)).not.toBeInTheDocument()
+    // 但内容应该展示
+    expect(screen.getByText(/你好/)).toBeInTheDocument()
+    expect(screen.getByText(/业务问题/)).toBeInTheDocument()
+  })
+
+  it('chit-chat section 不渲染 references 区块', () => {
+    const message = {
+      id: 'm2',
+      session_id: 's1',
+      role: 'assistant' as const,
+      content: '',
+      sections: [{
+        type: 'chit-chat' as const,
+        title: '',
+        content: '你好',
+        references: [],
+      }],
+      created_at: '2026-05-14T00:00:00Z',
+    }
+    render(<AssistantMessage message={message} />)
+    // 不显示 "引用来源" 之类的 references 标题
+    expect(screen.queryByText(/引用|参考|reference/i)).not.toBeInTheDocument()
+  })
+
+  it('普通 6 段式 section 仍然显示 h3 header（不被 chit-chat 改动影响）', () => {
+    const message = {
+      id: 'm3',
+      session_id: 's1',
+      role: 'assistant' as const,
+      content: '',
+      sections: [{
+        type: 'overview' as const,
+        title: '业务概述',
+        content: 'overview 内容',
+        references: [],
+      }],
+      created_at: '2026-05-14T00:00:00Z',
+    }
+    render(<AssistantMessage message={message} />)
+    // overview 类型仍带 emoji + title
+    expect(screen.getByText(/📋\s*业务概述/)).toBeInTheDocument()
+  })
+})

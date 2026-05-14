@@ -161,6 +161,8 @@ export function AssistantMessage({
       {hasSections ? (
         <div className="space-y-5 text-[15px] leading-[1.7]">
           {sections.map((s, i) => {
+            // v1.2: chit-chat 类型跳过 h3 header（单段无标题清爽渲染）
+            const isChitChat = s.type === 'chit-chat'
             const icon = SECTION_ICONS[s.type] ?? '📌'
             const title = s.title || SECTION_TITLES[s.type] || s.type
             // 只对 call_chain 段拆 mermaid；其他段直接当文本（更快、避免误判）
@@ -171,9 +173,12 @@ export function AssistantMessage({
                 : [{ type: 'text' as const, value: s.content || '' }]
             return (
               <div key={i}>
-                <h3 className="font-semibold text-[15px] mb-1.5 text-foreground">
-                  {icon} {title}
-                </h3>
+                {/* v1.2: chit-chat 类型跳过 h3 header（不显示 emoji + section title）*/}
+                {!isChitChat && (
+                  <h3 className="font-semibold text-[15px] mb-1.5 text-foreground">
+                    {icon} {title}
+                  </h3>
+                )}
                 <div className="text-foreground/85">
                   {chunks.map((chunk, ci) => {
                     if (chunk.type === 'mermaid') {
