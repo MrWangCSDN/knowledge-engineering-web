@@ -18,10 +18,10 @@ export function RecentHeader() {
       type="button"
       onClick={toggleRecent}
       aria-expanded={recentExpanded}
-      // 字体规格（设计 §5）：text-xs / font-semibold / uppercase / tracking-wider / muted
+      // 字体规格（设计 §5 v2，2026-05-13）：递减式 h2 — 最大最粗 text-base + font-bold + foreground
       className="
         w-full flex items-center gap-1 px-3 pt-3 pb-1.5
-        text-xs font-semibold uppercase tracking-wider text-muted-foreground
+        text-base font-bold text-foreground
         hover:bg-muted rounded transition-colors
       "
     >
