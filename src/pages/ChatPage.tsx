@@ -72,11 +72,16 @@ export function ChatPage() {
   }, [projectId, sessionId, currentProjectId, currentSessionId, loadSession, startNew])
 
   // 收到真实 session_id 后写回 URL
+  // 注意：必须用 status guard，否则用户从 /chat/<sid> 点「新对话」回 /project/<pid> 时，
+  // 这个 useEffect 的 closure 拿到的 currentSessionId 还是旧值（同一帧 startNew 还没 propagate）,
+  // 会把 URL replace 回旧 sess，看起来「新对话」不生效。
+  // 只在 SSE 流式过程中（status=submitting/streaming）才同步 URL — 这正是后端刚返 session_id 的场景。
   useEffect(() => {
-    if (currentSessionId && projectId && !sessionId) {
+    const isStreaming = status === 'streaming' || status === 'submitting'
+    if (isStreaming && currentSessionId && projectId && !sessionId) {
       navigate(`/project/${projectId}/chat/${currentSessionId}`, { replace: true })
     }
-  }, [currentSessionId, projectId, sessionId, navigate])
+  }, [currentSessionId, projectId, sessionId, status, navigate])
 
   // 工程未就绪 / 找不到的兜底
   if (isLoadingProjects) {
