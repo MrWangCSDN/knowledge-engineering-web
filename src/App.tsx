@@ -61,6 +61,7 @@ const GroupDetailPage = lazy(() => import('@/pages/settings/GroupDetailPage').th
 const ProjectDetailPage = lazy(() => import('@/pages/settings/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })))
 const UserListPage = lazy(() => import('@/pages/settings/UserListPage').then(m => ({ default: m.UserListPage })))
 const AuditLogPage = lazy(() => import('@/pages/settings/AuditLogPage').then(m => ({ default: m.AuditLogPage })))
+const ArchivedSessionsPage = lazy(() => import('@/pages/settings/ArchivedSessionsPage').then(m => ({ default: m.ArchivedSessionsPage })))
 
 
 /**
@@ -136,6 +137,8 @@ export default function App() {
             <Route path="users" element={<UserListPage />} />
             {/* 审计日志（新，admin only） */}
             <Route path="audit-logs" element={<AuditLogPage />} />
+            {/* 已归档对话（新，admin only） */}
+            <Route path="archived-chats" element={<ArchivedSessionsPage />} />
           </Route>
 
           <Route path="*" element={<NotFoundPage />} />

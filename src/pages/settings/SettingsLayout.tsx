@@ -14,7 +14,7 @@
  * 非 admin 用户看不到"用户"和"审计日志" tab（UI 层隐藏，后端 API 同样 403 兜底）。
  */
 import { NavLink, Outlet } from 'react-router-dom'
-import { GitBranch, Key, ChevronLeft, Users, ClipboardList, Layers } from 'lucide-react'
+import { GitBranch, Key, ChevronLeft, Users, ClipboardList, Layers, Archive } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { useAuthStore } from '@/store/auth'
@@ -33,6 +33,7 @@ const TABS: TabItem[] = [
   { to: '/settings/credentials', icon: Key,          label: '凭证' },
   { to: '/settings/users',       icon: Users,        label: '用户',      adminOnly: true },
   { to: '/settings/audit-logs',  icon: ClipboardList, label: '审计日志', adminOnly: true },
+  { to: '/settings/archived-chats', icon: Archive,   label: '已归档对话', adminOnly: true },
 ]
 
 export function SettingsLayout() {
