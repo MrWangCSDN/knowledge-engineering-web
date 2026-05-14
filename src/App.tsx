@@ -137,7 +137,7 @@ export default function App() {
             <Route path="users" element={<UserListPage />} />
             {/* 审计日志（新，admin only） */}
             <Route path="audit-logs" element={<AuditLogPage />} />
-            {/* 已归档对话（新，admin only） */}
+            {/* 已归档对话（新，所有登录用户都可访问；归档列表按 current_user.id 过滤）*/}
             <Route path="archived-chats" element={<ArchivedSessionsPage />} />
           </Route>
 
