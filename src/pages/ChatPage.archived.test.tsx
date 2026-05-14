@@ -20,9 +20,14 @@ const mockChatStore = {
   currentProjectId: 'p1',
 }
 
+// Mock useChatStore — 兼容 selector 调用 + .getState() 静态方法（v1.5.2 ChatPage fix 用到）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockUseChatStore: any = (selector: (s: typeof mockChatStore) => unknown) =>
+  selector(mockChatStore)
+mockUseChatStore.getState = () => mockChatStore
+
 vi.mock('@/store/chat', () => ({
-  useChatStore: (selector: (s: typeof mockChatStore) => unknown) =>
-    selector(mockChatStore),
+  useChatStore: mockUseChatStore,
 }))
 
 // 模拟 useProjectStore：返回一个工程让 project 找得到（含 stats 字段供 EmptyState 渲染）
