@@ -4,11 +4,10 @@
  * 极简侧栏 —— 跟随 ChatGPT 风格：
  *  - 顶部：折叠按钮 + Logo
  *  - 一组动作项（新对话 / 搜索对话）
- *  - 当前工程的会话历史（不分组，按 updated_at 倒序）
+ *  - 会话历史：三层折叠树（最近 → 工程 → session），由 SessionHistoryGrouped 负责
  *  - 底部：设置 / 帮助 + 主题切换
  *
- * 注：因为已经有 TopBar 的工程选择器作为切工程入口，
- *     侧栏只展示当前工程的会话即可（参考 ChatGPT，不做多项目分组）。
+ * 设计：[[会话历史层级化-设计]] §4
  */
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
 import { Edit, Search, Settings, HelpCircle, Moon, Sun, PanelLeft } from 'lucide-react'
