@@ -26,6 +26,9 @@ export interface Session {
   updated_at: string
   /** 消息条数（缓存值；左栏列表一目了然）。 */
   message_count: number
+  /** 归档时间。null/undefined = 活动 session；ISO 8601 字符串 = 已归档。
+   * 设计：[[会话归档-设计]] §7.1。 */
+  archived_at?: string | null
 }
 
 /**
@@ -34,4 +37,27 @@ export interface Session {
 export interface SessionDetail {
   session: Session
   messages: Message[]
+}
+
+/**
+ * GET /api/user/archived-sessions 返回的单条归档 session 行。
+ * 与 Session 类型字段相同，只是 archived_at 强制非空。
+ * 设计：[[会话归档-设计]] §5.5。
+ */
+export interface ArchivedSession {
+  id: string
+  title: string | null
+  archived_at: string  // ISO 8601；归档时间，必填
+  created_at: string
+  updated_at: string
+  message_count: number
+}
+
+/**
+ * 跨工程归档列表的「工程分组」。
+ */
+export interface ArchivedByProject {
+  project_id: string
+  project_name: string
+  sessions: ArchivedSession[]
 }

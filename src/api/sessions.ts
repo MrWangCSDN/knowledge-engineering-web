@@ -102,3 +102,31 @@ export async function exportMessageAsDocx(args: {
   // 让浏览器有机会先开始下载，再 revoke；setTimeout 0 就够了
   setTimeout(() => URL.revokeObjectURL(blobUrl), 0)
 }
+
+// ─── v1.5: 归档相关 API ────────────────────────────────────────────────────
+
+import type { ArchivedByProject } from '@/types/session'
+
+/** 归档 session（软删，从 sidebar 主列表移走，仍存在 DB）。幂等。
+ * 设计：[[会话归档-设计]] §5.1。 */
+export async function archiveSession(projectId: string, sessionId: string): Promise<void> {
+  await apiClient.post(
+    `/projects/${encodeURIComponent(projectId)}/qa/sessions/${encodeURIComponent(sessionId)}/archive`,
+  )
+}
+
+/** 恢复归档 session（archived_at 清空，回到 sidebar 主列表）。幂等。 */
+export async function unarchiveSession(projectId: string, sessionId: string): Promise<void> {
+  await apiClient.post(
+    `/projects/${encodeURIComponent(projectId)}/qa/sessions/${encodeURIComponent(sessionId)}/unarchive`,
+  )
+}
+
+/** 列出当前用户所有工程的归档 session（按工程分组）。 */
+export async function listArchivedSessions(): Promise<ArchivedByProject[]> {
+  interface ResponseShape {
+    by_project: ArchivedByProject[]
+  }
+  const { data } = await apiClient.get<ResponseShape>('/user/archived-sessions')
+  return data.by_project
+}
