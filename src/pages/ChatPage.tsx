@@ -72,16 +72,21 @@ export function ChatPage() {
   }, [projectId, sessionId, currentProjectId, currentSessionId, loadSession, startNew])
 
   // 收到真实 session_id 后写回 URL
-  // 注意：必须用 status guard，否则用户从 /chat/<sid> 点「新对话」回 /project/<pid> 时，
-  // 这个 useEffect 的 closure 拿到的 currentSessionId 还是旧值（同一帧 startNew 还没 propagate）,
-  // 会把 URL replace 回旧 sess，看起来「新对话」不生效。
-  // 只在 SSE 流式过程中（status=submitting/streaming）才同步 URL — 这正是后端刚返 session_id 的场景。
+  //
+  // 历史：v1.5.1 用 status guard（isStreaming）防新对话回弹 — 但快速 chit-chat
+  // 流（<500ms）会让 React batch useEffect，跑时 status 已变 'idle' → skip navigate
+  // → URL 不同步 → sidebar 不高亮 + 刷新页面回 EmptyState。
+  //
+  // 新方案：用 useChatStore.getState() 直接读 store 最新 currentSessionId，
+  // 不依赖 closure 快照。这同时解决两个 race：
+  // - 点「新对话」后 startNew → store.currentSessionId=null → skip navigate ✓
+  // - 快速 streaming 后 currentSessionId 已 set → 拿到最新值 navigate ✓
   useEffect(() => {
-    const isStreaming = status === 'streaming' || status === 'submitting'
-    if (isStreaming && currentSessionId && projectId && !sessionId) {
-      navigate(`/project/${projectId}/chat/${currentSessionId}`, { replace: true })
+    const liveSessionId = useChatStore.getState().currentSessionId
+    if (liveSessionId && projectId && !sessionId) {
+      navigate(`/project/${projectId}/chat/${liveSessionId}`, { replace: true })
     }
-  }, [currentSessionId, projectId, sessionId, status, navigate])
+  }, [currentSessionId, projectId, sessionId, navigate])
 
   // 工程未就绪 / 找不到的兜底
   if (isLoadingProjects) {
