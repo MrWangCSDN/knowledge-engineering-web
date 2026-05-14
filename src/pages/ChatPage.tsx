@@ -9,11 +9,12 @@
  *
  * 设计文档：[[首页设计]] §3
  */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 import { useProjectStore } from '@/store/projects'
 import { useChatStore } from '@/store/chat'
+import { getSessionDetail } from '@/api/sessions'
 import { EmptyState } from '@/components/chat/EmptyState'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
@@ -36,6 +37,24 @@ export function ChatPage() {
   const abort = useChatStore(s => s.abort)
   const currentSessionId = useChatStore(s => s.currentSessionId)
   const currentProjectId = useChatStore(s => s.currentProjectId)
+
+  // 归档状态：本地 state 存 archived_at，null = 活动 session
+  const [archivedAt, setArchivedAt] = useState<string | null | undefined>(undefined)
+
+  // sessionId 变化时拉取 session 详情以获取 archived_at
+  useEffect(() => {
+    if (!projectId || !sessionId) {
+      setArchivedAt(undefined)
+      return
+    }
+    setArchivedAt(undefined) // 重置，避免残留上一个 session 的状态
+    getSessionDetail(projectId, sessionId)
+      .then(detail => setArchivedAt(detail.session.archived_at ?? null))
+      .catch(() => setArchivedAt(null)) // 获取失败时当作未归档，不阻塞主流程
+  }, [projectId, sessionId])
+
+  // 是否归档（archived_at 非空 = 只读模式）
+  const isArchived = archivedAt != null && archivedAt !== undefined
 
   // URL ↔ store 同步
   useEffect(() => {
@@ -95,7 +114,42 @@ export function ChatPage() {
   const isEmpty = messages.length === 0 && !streamingMessage
   const isLoading = status === 'streaming' || status === 'submitting'
 
-  // 空状态：EmptyState 自带居中输入框，无需底部输入
+  // 归档 banner（empty state 和有消息两个路径都需要，抽成变量复用）
+  const archivedBanner = isArchived && (
+    <div className="border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30 px-4 py-3 mb-3 mx-4">
+      <p className="text-sm text-foreground">
+        <strong>该对话已归档</strong> — 恢复后可继续提问。
+        你可以在{' '}
+        <a href="/settings/archived-chats" className="underline text-primary">
+          设置 → 已归档对话
+        </a>{' '}
+        里恢复它。
+      </p>
+    </div>
+  )
+
+  // 空状态 + 归档：跳过 EmptyState（它内部有 ChatInput，会产生第二个 textbox），
+  // 直接渲染 banner + 一个 disabled 输入框
+  if (isEmpty && isArchived) {
+    return (
+      <div className="h-full flex flex-col">
+        {archivedBanner}
+        {error && <ErrorBar message={error} />}
+        <div className="flex-1" />
+        <div className="px-4 py-3 bg-background">
+          <ChatInput
+            onSend={handleSend}
+            loading={false}
+            onAbort={abort}
+            disabled={true}
+            placeholder="该对话已归档，无法继续提问"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // 空状态（活动 session）：EmptyState 自带居中输入框，无需底部输入
   if (isEmpty) {
     return (
       <div className="h-full flex flex-col">
@@ -115,6 +169,7 @@ export function ChatPage() {
   // 有消息：列表 + 底部输入
   return (
     <div className="h-full flex flex-col">
+      {archivedBanner}
       <div className="flex-1 overflow-y-auto">
         <MessageList messages={messages} streaming={streamingMessage} projectId={projectId} />
       </div>
@@ -126,7 +181,8 @@ export function ChatPage() {
           onSend={handleSend}
           loading={isLoading}
           onAbort={abort}
-          placeholder="继续追问..."
+          disabled={isArchived}
+          placeholder={isArchived ? '该对话已归档，无法继续提问' : '继续追问...'}
         />
       </div>
     </div>

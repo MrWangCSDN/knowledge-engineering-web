@@ -28,6 +28,8 @@ interface Props {
   placeholder?: string
   /** 是否在空状态（占主区中央时为 true，会用更大的字号/padding）。 */
   large?: boolean
+  /** 整体禁用（如归档 session 只读模式）。禁用时 textarea + 发送按钮全部不可用。 */
+  disabled?: boolean
 }
 
 const MAX_LINES = 6
@@ -39,6 +41,7 @@ export function ChatInput({
   onAbort,
   placeholder = '有问题，尽管问',
   large = false,
+  disabled = false,
 }: Props) {
   const [value, setValue] = useState('')
   const [composing, setComposing] = useState(false)
@@ -108,7 +111,7 @@ export function ChatInput({
           onCompositionStart={() => setComposing(true)}
           onCompositionEnd={() => setComposing(false)}
           placeholder={placeholder}
-          disabled={loading}
+          disabled={disabled || loading}
           rows={1}
           className={`
             flex-1 bg-transparent resize-none outline-none border-0
@@ -140,7 +143,7 @@ export function ChatInput({
           <button
             type="button"
             onClick={loading ? onAbort : submit}
-            disabled={!loading && !hasText}
+            disabled={disabled || (!loading && !hasText)}
             aria-label={loading ? '停止' : '发送'}
             className={`
               h-8 w-8 rounded-full

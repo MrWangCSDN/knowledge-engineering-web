@@ -1,0 +1,101 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { ChatPage } from './ChatPage'
+import * as sessionsApi from '@/api/sessions'
+
+vi.mock('@/api/sessions')
+
+// 模拟 useChatStore：返回空消息列表，不触发真实 SSE
+const mockChatStore = {
+  messages: [],
+  streamingMessage: null,
+  status: 'idle',
+  error: null,
+  sendMessage: vi.fn(),
+  loadSession: vi.fn(),
+  startNew: vi.fn(),
+  abort: vi.fn(),
+  currentSessionId: 'sess_arch',
+  currentProjectId: 'p1',
+}
+
+vi.mock('@/store/chat', () => ({
+  useChatStore: (selector: (s: typeof mockChatStore) => unknown) =>
+    selector(mockChatStore),
+}))
+
+// 模拟 useProjectStore：返回一个工程让 project 找得到（含 stats 字段供 EmptyState 渲染）
+const mockProjectStore = {
+  projects: [{
+    id: 'p1',
+    name: 'Test Project',
+    status: 'ready',
+    stats: { methods_count: 0, classes_count: 0, interpretation_progress: 0 },
+  }],
+  isLoading: false,
+}
+
+vi.mock('@/store/projects', () => ({
+  useProjectStore: (selector: (s: typeof mockProjectStore) => unknown) =>
+    selector(mockProjectStore),
+}))
+
+describe('ChatPage: archived session 只读模式', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // 重置 store 状态
+    mockChatStore.messages = []
+    mockChatStore.streamingMessage = null
+    mockChatStore.status = 'idle'
+    mockChatStore.error = null
+    mockChatStore.currentSessionId = 'sess_arch'
+    mockChatStore.currentProjectId = 'p1'
+  })
+
+  it('归档 session 顶部显示 banner「该对话已归档」', async () => {
+    vi.mocked(sessionsApi.getSessionDetail).mockResolvedValue({
+      session: {
+        id: 'sess_arch', project_id: 'p1', title: '老对话',
+        created_at: '2026-05-01T00:00:00Z',
+        updated_at: '2026-05-10T00:00:00Z',
+        message_count: 3,
+        archived_at: '2026-05-13T10:00:00Z',
+      },
+      messages: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/project/p1/chat/sess_arch']}>
+        <Routes>
+          <Route path="/project/:projectId/chat/:sessionId" element={<ChatPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await waitFor(() => {
+      expect(screen.getByText(/该对话已归档/)).toBeInTheDocument()
+    })
+  })
+
+  it('归档 session 输入框 disabled', async () => {
+    vi.mocked(sessionsApi.getSessionDetail).mockResolvedValue({
+      session: {
+        id: 'sess_arch', project_id: 'p1', title: '老对话',
+        created_at: '...', updated_at: '...',
+        message_count: 3,
+        archived_at: '2026-05-13T10:00:00Z',
+      },
+      messages: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/project/p1/chat/sess_arch']}>
+        <Routes>
+          <Route path="/project/:projectId/chat/:sessionId" element={<ChatPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await waitFor(() => {
+      const input = screen.getByRole('textbox')
+      expect(input).toBeDisabled()
+    })
+  })
+})
