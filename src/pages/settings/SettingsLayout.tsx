@@ -33,7 +33,7 @@ const TABS: TabItem[] = [
   { to: '/settings/credentials', icon: Key,          label: '凭证' },
   { to: '/settings/users',       icon: Users,        label: '用户',      adminOnly: true },
   { to: '/settings/audit-logs',  icon: ClipboardList, label: '审计日志', adminOnly: true },
-  { to: '/settings/archived-chats', icon: Archive,   label: '已归档对话', adminOnly: true },
+  { to: '/settings/archived-chats', icon: Archive,   label: '已归档对话' },
 ]
 
 export function SettingsLayout() {
