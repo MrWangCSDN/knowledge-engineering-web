@@ -39,6 +39,7 @@ export type SectionType =
   | 'db_ops'        // 💾 数据库操作
   | 'rules'         // ⚠️ 关键约束/规则
   | 'sources'       // 🔗 引用源（含新鲜度徽章）
+  | 'chit-chat'     // 💬 闲聊单段（v1.2，前端简化渲染无 h3 header）
 
 /**
  * 答案的一段。LLM 输出 sections[]，前端按段渲染（每段独立卡片）。
