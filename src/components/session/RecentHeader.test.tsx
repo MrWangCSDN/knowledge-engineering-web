@@ -27,7 +27,12 @@ describe('RecentHeader', () => {
 
   it('点击切换 recentExpanded', () => {
     render(<RecentHeader />)
-    fireEvent.click(screen.getByRole('button', { name: /最近/ }))
+    const btn = screen.getByRole('button', { name: /最近/ })
+    // 初始 aria-expanded=true（默认展开）
+    expect(btn).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(btn)
     expect(useSidebarStore.getState().recentExpanded).toBe(false)
+    // 点击后 aria-expanded=false
+    expect(btn).toHaveAttribute('aria-expanded', 'false')
   })
 })
