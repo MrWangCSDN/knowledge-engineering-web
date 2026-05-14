@@ -9,7 +9,12 @@
  * 设计文档：[[首页设计]] §6.6
  */
 import { create } from 'zustand'
-import { listSessions, deleteSession as apiDeleteSession } from '@/api/sessions'
+import {
+  listSessions,
+  deleteSession as apiDeleteSession,
+  archiveSession as apiArchiveSession,
+  unarchiveSession as apiUnarchiveSession,
+} from '@/api/sessions'
 import type { Session } from '@/types/session'
 
 interface SessionStore {
@@ -25,6 +30,10 @@ interface SessionStore {
   fetchSessions: (projectId: string) => Promise<void>
   /** 删除会话；调后端 + 同步 store。 */
   deleteSession: (projectId: string, sessionId: string) => Promise<void>
+  /** 归档单个 session：调后端 + 本地从 sessionsByProject 移除。 */
+  archiveSession: (projectId: string, sessionId: string) => Promise<void>
+  /** 取消归档：调后端；返回后 sidebar 端通常需要 fetchSessions 刷新。 */
+  unarchiveSession: (projectId: string, sessionId: string) => Promise<void>
   /** SSE 流完成时由 chatStore 调，把新创建的 session 插到顶部。 */
   prependSession: (session: Session) => void
   /** 清空（登出 / 切工程时）。 */
@@ -64,6 +73,25 @@ export const useSessionStore = create<SessionStore>((set) => ({
         },
       }
     })
+  },
+
+  archiveSession: async (projectId: string, sessionId: string) => {
+    // 后端成功后才本地移除（保证失败时 sidebar 仍能看到）
+    await apiArchiveSession(projectId, sessionId)
+    set(state => {
+      const list = state.sessionsByProject[projectId] ?? []
+      return {
+        sessionsByProject: {
+          ...state.sessionsByProject,
+          [projectId]: list.filter(s => s.id !== sessionId),
+        },
+      }
+    })
+  },
+
+  unarchiveSession: async (projectId: string, sessionId: string) => {
+    // 仅调后端；本地是否注入由调用方决定（归档页恢复 → 触发 fetchSessions 拉一遍）
+    await apiUnarchiveSession(projectId, sessionId)
   },
 
   prependSession: (session: Session) => {
