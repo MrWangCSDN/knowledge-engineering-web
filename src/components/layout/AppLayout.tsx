@@ -27,7 +27,15 @@ export function AppLayout() {
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden">
         <MainHeader />
-        <Outlet />
+        {/*
+          Outlet wrapper: flex-1 让子页面占剩余高度，min-h-0 允许 flex-col 内部缩小。
+          没这层包装的话，子页面（如 ChatPage）用 h-full 会等于 main 全高度
+          （忽略 MainHeader 占的 48px），消息多触发 overflow 后 MainHeader 会被
+          挤出屏幕看不到（bug 复现于 2026-05-15「工程切换器跟着消息滚走了」）。
+        */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <Outlet />
+        </div>
       </main>
     </div>
   )
