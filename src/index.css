@@ -69,6 +69,12 @@
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
 
+  /* ── Sidebar 专用 bg：跟 ChatGPT 一致——比主区略浅/略深一档 ── */
+  /* light：用 oklch(0.985) ≈ #FAFAFA（与主区 #FFF 形成柔和层次） */
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-muted-foreground: oklch(0.556 0 0);
+
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
 
@@ -106,11 +112,17 @@
   --brand-panel-fg: oklch(1 0 0);
   --brand-cyan: #22c8d0;
 
-  --background: oklch(0.245 0 0);    /* ≈ #212121 */
-  --foreground: oklch(1 0 0);        /* 纯白 #FFFFFF (rgb 255,255,255) */
+  --background: oklch(0.245 0 0);    /* ≈ #212121 主区背景 */
+  --foreground: oklch(0.95 0 0);     /* ≈ #F1F1F1 — 略偏离纯白，对齐 ChatGPT，长时间观看更柔和 */
+
+  /* ── Sidebar 专用 bg：dark 模式下比主区深一档，营造"侧栏更暗"的层次感（ChatGPT 同款） ── */
+  /* oklch(0.205) ≈ #171717 — 比主区 #212121 深约 8% */
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-muted-foreground: oklch(0.68 0 0);  /* 比 main 的 muted-fg 略低对比，分组标签用 */
 
   --card: oklch(0.245 0 0);
-  --card-foreground: oklch(1 0 0);
+  --card-foreground: oklch(0.95 0 0);
 
   --popover: oklch(0.27 0 0);
   --popover-foreground: oklch(1 0 0);
@@ -145,6 +157,10 @@
   --color-brand-panel-fg: var(--brand-panel-fg);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* Sidebar 专用：用 bg-sidebar / text-sidebar-foreground / text-sidebar-muted-foreground */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);

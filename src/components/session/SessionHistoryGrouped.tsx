@@ -59,7 +59,7 @@ export function SessionHistoryGrouped() {
       {recentExpanded && (
         <>
           {sortedProjects.length === 0 ? (
-            <p className="px-3 py-4 text-[15px] text-muted-foreground text-center">
+            <p className="px-3 py-4 text-sm text-sidebar-muted-foreground text-center">
               还没有对话历史 — 点上方「+ 新对话」开始
             </p>
           ) : (

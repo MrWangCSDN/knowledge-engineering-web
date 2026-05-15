@@ -18,23 +18,26 @@ export function RecentHeader() {
       type="button"
       onClick={toggleRecent}
       aria-expanded={recentExpanded}
-      // 字体规格（设计 §5 v2，2026-05-13）：递减式 h2 — 最大最粗 text-base + font-bold + foreground
+      // 字体规格（v3，2026-05-15）：对齐 ChatGPT 分组标签风格
+      //   - text-xs (12px) + font-semibold：小号但有分量
+      //   - text-sidebar-muted-foreground：灰色（不是 foreground）→ 分组属性
+      //   - uppercase / 中文不变形，但 letter-spacing(tracking) 仍能加可读性
       className="
-        w-full flex items-center gap-1 px-3 pt-3 pb-1.5
-        text-base font-bold text-foreground
-        hover:bg-muted rounded transition-colors
+        w-full flex items-center gap-1 px-3 pt-4 pb-1
+        text-xs font-semibold text-sidebar-muted-foreground tracking-wider
+        hover:text-sidebar-foreground rounded transition-colors
       "
     >
       {/* chevron：展开 → ↓ ; 折叠 → → */}
       {recentExpanded ? (
         <ChevronDown
           data-testid="recent-chevron-down"
-          className="h-3.5 w-3.5"
+          className="h-3 w-3"
         />
       ) : (
         <ChevronRight
           data-testid="recent-chevron-right"
-          className="h-3.5 w-3.5"
+          className="h-3 w-3"
         />
       )}
       <span>最近</span>

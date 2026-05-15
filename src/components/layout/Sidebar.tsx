@@ -29,7 +29,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden lg:flex w-[260px] flex-col bg-background border-r overflow-hidden shrink-0">
+    <aside className="hidden lg:flex w-[260px] flex-col bg-sidebar text-sidebar-foreground border-r overflow-hidden shrink-0">
       {/* ─── 顶部 header：logo + 折叠按钮（hover 效果对齐） ─── */}
       <div className="h-12 flex items-center justify-between px-2 shrink-0">
         <Link
@@ -64,7 +64,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* ─── 动作组（字号 +1，全部用 text-foreground 保证暗色全亮） ─── */}
+      {/* ─── 动作组（ChatGPT 对齐：text-sm regular + 16px icon，密度更紧凑） ─── */}
       <div className="px-2 py-1 space-y-0.5">
         <button
           type="button"
@@ -72,12 +72,12 @@ export function Sidebar() {
           disabled={!projectId}
           className="
             w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
-            text-[15px] font-medium text-foreground
+            text-sm text-sidebar-foreground
             hover:bg-muted transition-colors
             disabled:opacity-50 disabled:cursor-not-allowed
           "
         >
-          <Edit className="h-[18px] w-[18px]" />
+          <Edit className="h-4 w-4" />
           新对话
         </button>
         <button
@@ -86,12 +86,12 @@ export function Sidebar() {
           title="搜索对话（v1.5 上线）"
           className="
             w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
-            text-[15px] text-foreground
+            text-sm text-sidebar-foreground
             hover:bg-muted transition-colors
             disabled:opacity-50 disabled:cursor-not-allowed
           "
         >
-          <Search className="h-[18px] w-[18px]" />
+          <Search className="h-4 w-4" />
           搜索对话
         </button>
       </div>
@@ -99,17 +99,17 @@ export function Sidebar() {
       {/* ─── 会话历史（三层折叠树，v1.5）─── */}
       <SessionHistoryGrouped />
 
-      {/* ─── 底部：套餐 / 设置 / 帮助 + 主题 ─── */}
+      {/* ─── 底部：套餐 / 设置 / 帮助 + 主题（字号统一 text-sm，与 ChatGPT 对齐） ─── */}
       <div className="border-t p-2 space-y-0.5">
         <SidebarFooterLink to="/settings" icon={Settings} label="设置" />
         <SidebarFooterLink to="/help" icon={HelpCircle} label="帮助" disabled />
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-2.5 font-normal text-[15px] text-foreground"
+          className="w-full justify-start gap-2.5 font-normal text-sm text-sidebar-foreground"
           onClick={toggleTheme}
         >
-          {theme === 'dark' ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           <span>{theme === 'dark' ? '亮色模式' : '暗色模式'}</span>
         </Button>
       </div>
@@ -133,11 +133,11 @@ function SidebarFooterLink({
       <div
         className="
           flex items-center gap-2.5 px-3 py-2 rounded-lg
-          text-[15px] text-muted-foreground cursor-not-allowed
+          text-sm text-sidebar-muted-foreground cursor-not-allowed
         "
         title="v1.5 上线"
       >
-        <Icon className="h-[18px] w-[18px]" />
+        <Icon className="h-4 w-4" />
         {label}
       </div>
     )
@@ -146,12 +146,14 @@ function SidebarFooterLink({
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[15px] transition-colors ${
-          isActive ? 'bg-muted font-medium text-foreground' : 'hover:bg-muted text-foreground'
+        `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+          isActive
+            ? 'bg-muted font-medium text-sidebar-foreground'
+            : 'hover:bg-muted text-sidebar-foreground'
         }`
       }
     >
-      <Icon className="h-[18px] w-[18px]" />
+      <Icon className="h-4 w-4" />
       {label}
     </NavLink>
   )

@@ -31,22 +31,22 @@ export function ProjectGroup({ project, sessions }: Props) {
         type="button"
         onClick={() => toggleProject(project.id)}
         aria-expanded={isExpanded}
-        // 字体规格（设计 §5）：text-sm / font-medium / foreground
+        // 字体规格（v3，2026-05-15）：用 sidebar-foreground 跟随 sidebar 主题
         className="
           w-full flex items-center gap-1 px-3 py-1.5
-          text-sm font-medium text-foreground
+          text-sm font-medium text-sidebar-foreground
           hover:bg-muted rounded transition-colors
         "
       >
         {isExpanded ? (
           <ChevronDown
             data-testid={`project-${project.id}-chevron-down`}
-            className="h-3.5 w-3.5 text-muted-foreground"
+            className="h-3.5 w-3.5 text-sidebar-muted-foreground"
           />
         ) : (
           <ChevronRight
             data-testid={`project-${project.id}-chevron-right`}
-            className="h-3.5 w-3.5 text-muted-foreground"
+            className="h-3.5 w-3.5 text-sidebar-muted-foreground"
           />
         )}
         <span className="truncate">{project.name}</span>

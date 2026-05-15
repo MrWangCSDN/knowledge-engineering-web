@@ -54,10 +54,10 @@ export function SessionItem({ session, project }: Props) {
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onClick()}
         className={`
           group flex items-center gap-1 px-3 py-2 rounded-lg cursor-pointer
-          text-[13px] transition-colors
+          text-sm transition-colors
           ${isActive
-            ? 'bg-muted text-foreground font-medium'
-            : 'hover:bg-muted text-foreground'
+            ? 'bg-muted text-sidebar-foreground font-medium'
+            : 'hover:bg-muted text-sidebar-foreground'
           }
         `}
       >

@@ -71,12 +71,12 @@ export function MainHeader() {
         <DropdownMenuTrigger
           className="
             inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-            text-[15px] font-medium text-foreground
+            text-sm font-medium text-foreground
             hover:bg-muted transition-colors
             focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
           "
         >
-          <FolderClosed className="h-[18px] w-[18px]" />
+          <FolderClosed className="h-4 w-4" />
           <span className="truncate max-w-[200px]">
             {currentProject ? currentProject.name : '选择工程'}
           </span>
