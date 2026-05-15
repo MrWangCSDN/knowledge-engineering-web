@@ -22,8 +22,35 @@ const MermaidDiagram = lazy(() =>
   import('./MermaidDiagram').then(m => ({ default: m.MermaidDiagram })),
 )
 import { ToolCallCard } from './ToolCallCard'
+import { CodeBlock } from './CodeBlock'
 import { extractSectionContents } from './extractSectionContents'
 import { useThemeStore } from '@/store/theme'
+
+// v1.10：ReactMarkdown components 覆盖 — 把 fenced code block 渲染为 ChatGPT 风格 CodeBlock
+// react-markdown v10 的 code 钩子 props: { className?, children, node, ... }
+// `inline` 字段已废弃，改用 className 是否含 `language-xxx` 来判断
+//
+// 类型用 Record<string, unknown> 兼容 react-markdown 的宽松 props（避免 deps 严格 typing）
+const MD_COMPONENTS = {
+  code: (props: Record<string, unknown>) => {
+    const className = (props.className as string) || ''
+    const children = props.children
+    // 行内 `code` 没有 className，直接走 inline 样式
+    if (!className.startsWith('language-')) {
+      return (
+        <code className="bg-muted px-1 py-0.5 rounded text-[13px] font-mono">
+          {children as React.ReactNode}
+        </code>
+      )
+    }
+    // fenced ```lang ... ``` → 走 CodeBlock
+    const language = className.replace('language-', '')
+    const codeText = String(children ?? '').replace(/\n$/, '')
+    return <CodeBlock language={language} value={codeText} />
+  },
+  // 让 ReactMarkdown 渲染 fenced code 时不再包外层 <pre>（CodeBlock 自带容器）
+  pre: (props: Record<string, unknown>) => <>{props.children as React.ReactNode}</>,
+}
 
 const SECTION_ICONS: Record<string, string> = {
   overview: '📋',
@@ -198,10 +225,21 @@ export function AssistantMessage({
                         </Suspense>
                       )
                     }
-                    // 普通文本：保留换行 + 缩进
+                    // 普通文本：v1.10 改用 ReactMarkdown 渲染，让 fenced code block 走 CodeBlock
+                    // 之前 whitespace-pre-wrap 显示原始 ```java 字符串没语法高亮
                     return (
-                      <div key={ci} className="whitespace-pre-wrap">
-                        {chunk.value}
+                      <div key={ci} className="
+                        [&_p]:mb-2 [&_p:last-child]:mb-0
+                        [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-1.5
+                        [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
+                        [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground
+                      ">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={MD_COMPONENTS}
+                        >
+                          {chunk.value}
+                        </ReactMarkdown>
                       </div>
                     )
                   })}
@@ -252,7 +290,8 @@ export function AssistantMessage({
                 ) : (
                   // 把已经完整的 content 拼起来，用 markdown 渲染
                   // 段间用 "\n\n---\n\n" 分隔，模拟原答案的段落感
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  // v1.10: components={MD_COMPONENTS} 让流式代码块也走 CodeBlock 语法高亮
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
                     {sectionContents.join('\n\n---\n\n')}
                   </ReactMarkdown>
                 )}
@@ -274,7 +313,8 @@ export function AssistantMessage({
                             [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-1.5
                             [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
                             [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {/* v1.10: components={MD_COMPONENTS} 让代码块走 CodeBlock 语法高亮 */}
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
                 {message.raw_stream}
               </ReactMarkdown>
               <span className="ml-0.5 animate-pulse">▌</span>
