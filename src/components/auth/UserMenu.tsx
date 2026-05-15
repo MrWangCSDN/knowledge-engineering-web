@@ -167,13 +167,16 @@ export function UserMenu() {
 
       {/* dropdown 面板：仅 open 为 true 时渲染（&& 短路，false 时 React 不挂载此节点） */}
       {open && (
-        // absolute bottom-full：绝对定位，bottom-full 让 dropdown 出现在触发按钮上方
-        // left-0 w-full：与触发按钮左对齐且同宽
-        // mb-1：与按钮之间留 4px 间距
+        // absolute top-full：绝对定位，top-full 让 dropdown 出现在触发按钮下方
+        // （此组件在顶部 MainHeader 用，向下弹合理；旧版 bottom-full 是 sidebar 底部场景遗留）
+        // right-0：右对齐 trigger，避免长 email 撑到屏幕外
+        // min-w-[200px]：最小宽度，保证 email + 登出按钮可读
+        // mt-1：与按钮之间留 4px 间距
         // border bg-popover shadow-md：主题边框色、弹出层背景色、中等阴影
         //   bg-popover 是 shadcn/ui design token，light/dark 下自动切换，不需要手动适配
+        // z-50：层级高于其他 absolute 元素（如 sidebar 折叠 chevron / mermaid 图）
         <div
-          className="absolute bottom-full left-0 mb-1 w-full rounded-md border bg-popover shadow-md"
+          className="absolute top-full right-0 mt-1 min-w-[200px] rounded-md border bg-popover shadow-md z-50"
           // role="menu" + aria-label：让屏幕阅读器知道这是一个菜单区域
           role="menu"
           aria-label="用户操作菜单"
