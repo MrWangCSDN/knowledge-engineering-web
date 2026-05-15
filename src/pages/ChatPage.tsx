@@ -56,20 +56,30 @@ export function ChatPage() {
   // 是否归档（archived_at 非空 = 只读模式）
   const isArchived = archivedAt != null && archivedAt !== undefined
 
-  // URL ↔ store 同步
+  // URL ↔ store 同步（仅响应 URL 变化，不响应 store 内部状态变化）
+  //
+  // 历史：deps 含 currentSessionId 会触发 race —— 新会话 sendMessage 时
+  // SSE meta event 把 store.currentSessionId 从 null 设为 <new_sid>，此 useEffect
+  // 被 currentSessionId 变化触发，closure 里 sessionId 还是 undef → 走 else 分支
+  // 误调 startNew → 清空 messages（含已 push 的 user msg）→ done event 后只剩
+  // assistant msg → 看起来 KE 回复"在用户提问之前"。
+  //
+  // 修：deps 去掉 currentSessionId / currentProjectId，effect 只对 URL 变化 fire；
+  // 用 useChatStore.getState() 拿 store 最新值做判断，避免 closure 旧值 race。
   useEffect(() => {
     if (!projectId) return
-    if (currentProjectId && currentProjectId !== projectId) {
+    const live = useChatStore.getState()
+    if (live.currentProjectId && live.currentProjectId !== projectId) {
       startNew(projectId)
       return
     }
     if (sessionId) {
-      if (sessionId !== currentSessionId) loadSession(projectId, sessionId)
+      if (sessionId !== live.currentSessionId) loadSession(projectId, sessionId)
     } else {
-      if (currentSessionId) startNew(projectId)
-      else if (!currentProjectId) startNew(projectId)
+      if (live.currentSessionId) startNew(projectId)
+      else if (!live.currentProjectId) startNew(projectId)
     }
-  }, [projectId, sessionId, currentProjectId, currentSessionId, loadSession, startNew])
+  }, [projectId, sessionId, loadSession, startNew])
 
   // 收到真实 session_id 后写回 URL
   //
