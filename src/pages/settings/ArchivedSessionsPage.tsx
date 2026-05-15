@@ -7,10 +7,11 @@
  *
  * 设计：[[会话归档-设计]] §8.2。
  */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Archive } from 'lucide-react'
 
 import { useArchivedSessionStore } from '@/store/archivedSessions'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 export function ArchivedSessionsPage() {
   const byProject = useArchivedSessionStore(s => s.byProject)
@@ -20,6 +21,9 @@ export function ArchivedSessionsPage() {
   const restore = useArchivedSessionStore(s => s.restore)
   const permanentDelete = useArchivedSessionStore(s => s.permanentDelete)
 
+  // 待彻底删除的项；非 null 时打开 ConfirmDialog
+  const [pendingDelete, setPendingDelete] = useState<{ projectId: string; sessionId: string } | null>(null)
+
   // 挂载即拉一次
   useEffect(() => {
     fetchAll()
@@ -27,6 +31,12 @@ export function ArchivedSessionsPage() {
 
   // 防御过滤：丢掉 sessions 为空的分组（store helper 行为偶尔保留空分组）
   const visibleGroups = byProject.filter(g => g.sessions.length > 0)
+
+  const handleConfirmDelete = () => {
+    if (!pendingDelete) return
+    permanentDelete(pendingDelete.projectId, pendingDelete.sessionId)
+    setPendingDelete(null)
+  }
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -82,12 +92,7 @@ export function ArchivedSessionsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!window.confirm(
-                        '彻底删除该对话？此操作不可恢复。'
-                      )) return
-                      permanentDelete(group.project_id, s.id)
-                    }}
+                    onClick={() => setPendingDelete({ projectId: group.project_id, sessionId: s.id })}
                     className="px-3 py-1.5 text-sm rounded border border-destructive text-destructive hover:bg-destructive/10 transition-colors"
                   >
                     彻底删除
@@ -98,6 +103,17 @@ export function ArchivedSessionsPage() {
           </ul>
         </section>
       ))}
+
+      {/* 统一的彻底删除二次确认对话框（替代 window.confirm） */}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="彻底删除该对话"
+        message="此操作不可恢复。"
+        confirmText="彻底删除"
+        variant="destructive"
+      />
     </div>
   )
 }

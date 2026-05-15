@@ -5,9 +5,11 @@
  *
  * 设计文档：[[首页设计]] §3.4，[[会话归档-设计]] §8.1, §8.5
  */
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useSessionStore } from '@/store/sessions'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { SessionMenu } from './SessionMenu'
 import type { Session } from '@/types/session'
 import type { Project } from '@/types/project'
@@ -23,11 +25,24 @@ export function SessionItem({ session, project }: Props) {
   const archive = useSessionStore(s => s.archiveSession)
   const deleteSession = useSessionStore(s => s.deleteSession)
 
+  // 删除二次确认对话框开关
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+
   const isActive = currentSessionId === session.id
 
   const onClick = () => {
     // 切到对应工程的对应会话
     navigate(`/project/${project.id}/chat/${session.id}`)
+  }
+
+  const doDelete = async () => {
+    setConfirmDeleteOpen(false)
+    try {
+      await deleteSession(project.id, session.id)
+      if (isActive) navigate(`/project/${project.id}`)
+    } catch {
+      // 静默
+    }
   }
 
   return (
@@ -63,17 +78,20 @@ export function SessionItem({ session, project }: Props) {
               // 失败时静默 — store 已保留状态；后续可加 toast
             }
           }}
-          onDelete={async () => {
-            if (!window.confirm('确认删除该对话？此操作不可恢复。')) return
-            try {
-              await deleteSession(project.id, session.id)
-              if (isActive) navigate(`/project/${project.id}`)
-            } catch {
-              // 静默
-            }
-          }}
+          onDelete={() => setConfirmDeleteOpen(true)}
         />
       </div>
+
+      {/* 统一的二次确认对话框（替代 window.confirm） */}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={doDelete}
+        title="确认删除该对话"
+        message="此操作不可恢复。"
+        confirmText="删除"
+        variant="destructive"
+      />
     </li>
   )
 }

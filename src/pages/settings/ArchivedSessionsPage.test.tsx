@@ -72,7 +72,7 @@ describe('ArchivedSessionsPage', () => {
     await waitFor(() => expect(mockStoreState.restore).toHaveBeenCalledWith('p1', 's1'))
   })
 
-  it('点「彻底删除」弹二次确认，确认后调 permanentDelete', async () => {
+  it('点「彻底删除」弹 ConfirmDialog 二次确认，点确定按钮才调 permanentDelete', async () => {
     mockStoreState.byProject = [{
       project_id: 'p1', project_name: 'P1',
       sessions: [{
@@ -81,9 +81,24 @@ describe('ArchivedSessionsPage', () => {
       }],
     }]
     mockStoreState.permanentDelete = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<MemoryRouter><ArchivedSessionsPage /></MemoryRouter>)
-    fireEvent.click(screen.getByRole('button', { name: '彻底删除' }))
+
+    // 列表里的「彻底删除」按钮
+    const listDeleteBtns = screen.getAllByRole('button', { name: '彻底删除' })
+    fireEvent.click(listDeleteBtns[0])
+
+    // ConfirmDialog 弹出 — 此时不应调 permanentDelete
+    expect(mockStoreState.permanentDelete).not.toHaveBeenCalled()
+
+    // 等 dialog 弹出（多一个「彻底删除」按钮，是 dialog 的确定按钮）
+    await waitFor(() => {
+      const btns = screen.getAllByRole('button', { name: '彻底删除' })
+      expect(btns.length).toBe(2)  // 列表按钮 + dialog 按钮
+    })
+    // dialog 的确定按钮（后渲染）
+    const allDeleteBtns = screen.getAllByRole('button', { name: '彻底删除' })
+    fireEvent.click(allDeleteBtns[allDeleteBtns.length - 1])
+
     await waitFor(() => expect(mockStoreState.permanentDelete).toHaveBeenCalledWith('p1', 's1'))
   })
 })
