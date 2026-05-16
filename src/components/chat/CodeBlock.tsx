@@ -150,6 +150,11 @@ export function CodeBlock({ language, value, inline, children }: Props) {
           lineHeight: '1.6',
           background: 'transparent',
         }}
+        // 关键（2026-05-16）：oneLight/vscDarkPlus 主题会给内层 <code> 元素
+        // 自带一个 background（白/深），customStyle 只作用于外层 <pre>，
+        // 不覆盖 <code> → 每行透出主题白底成"白块"。codeTagProps 把
+        // <code> 也设透明，统一露出 --code-bg 面板底。
+        codeTagProps={{ style: { background: 'transparent' } }}
         wrapLongLines={false}
       >
         {value.replace(/\n$/, '')}
