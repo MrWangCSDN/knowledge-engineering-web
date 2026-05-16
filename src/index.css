@@ -113,16 +113,16 @@
   --brand-cyan: #22c8d0;
 
   --background: oklch(0.245 0 0);    /* ≈ #212121 主区背景 */
-  --foreground: oklch(0.95 0 0);     /* ≈ #F1F1F1 — 略偏离纯白，对齐 ChatGPT，长时间观看更柔和 */
+  --foreground: oklch(0.985 0 0);    /* ≈ #FAFAFA 近纯白 — 对齐 ChatGPT 亮白正文（之前误调到 0.95 显灰，已恢复） */
 
   /* ── Sidebar 专用 bg：dark 模式下比主区深一档，营造"侧栏更暗"的层次感（ChatGPT 同款） ── */
   /* oklch(0.205) ≈ #171717 — 比主区 #212121 深约 8% */
   --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-muted-foreground: oklch(0.68 0 0);  /* 比 main 的 muted-fg 略低对比，分组标签用 */
+  --sidebar-foreground: oklch(0.985 0 0);       /* 会话标题用 — ChatGPT 同款亮白，不能灰 */
+  --sidebar-muted-foreground: oklch(0.68 0 0);  /* 分组标签（最近/工程名）用 — ChatGPT 这些也是灰的，保持 */
 
   --card: oklch(0.245 0 0);
-  --card-foreground: oklch(0.95 0 0);
+  --card-foreground: oklch(0.985 0 0);
 
   --popover: oklch(0.27 0 0);
   --popover-foreground: oklch(1 0 0);
