@@ -9,6 +9,7 @@
  * 需 mock fetch+SSE+auth，过重且脆。这里聚焦验证 case body 依赖的契约：
  * updateSessionTitle 能按 sessionId 改对应 session 标题（设计 §4.2）。
  */
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useSessionStore } from './sessions'
 import type { Session } from '@/types/session'
@@ -44,5 +45,37 @@ describe('chat SSE session_title 事件', () => {
     expect(
       useSessionStore.getState().sessionsByProject.p1[0].title,
     ).toBe('临时')
+  })
+})
+
+/**
+ * 控制流不变量回归测试（characterization，2026-05-16）：
+ *
+ * 后端在 SSE `done` 事件【之后】才发 `session_title` 事件（首轮异步总结）。
+ * chat.ts 的 reader 循环是 `while (!stopped)`；若 `case 'done'` 里 set
+ * stopped=true，循环会在 done 后立即退出、reader 停读 → session_title
+ * 永远收不到 → 侧栏标题不刷新（E2E 实测发现的真 bug）。
+ *
+ * SSE parser 是 sendMessage 内闭包不可直接单测，这里用源码不变量兜底：
+ * `case 'done'` 块内不得出现 `stopped = true`。退出由 reader.read() 的
+ * done=true（流自然结束）兜底。设计：[[会话标题-重命名与智能总结-设计]] §4.2
+ */
+describe('chat.ts SSE 控制流不变量', () => {
+  it("case 'done' 不得 set stopped=true（否则 session_title 收不到）", () => {
+    // vitest cwd = 仓库根；直接相对路径读源码（比 import.meta.url 在测试环境稳）
+    const src = readFileSync('src/store/chat.ts', 'utf-8')
+    const doneIdx = src.indexOf("case 'done':")
+    const nextCaseIdx = src.indexOf("case 'session_title':", doneIdx)
+    expect(doneIdx).toBeGreaterThan(-1)
+    expect(nextCaseIdx).toBeGreaterThan(doneIdx)
+    const doneBlock = src.slice(doneIdx, nextCaseIdx)
+    // 先剥掉 // 行注释（注释里解释 "stopped=true" 的文字不算代码语句），
+    // 再归一化空白后断言：真实代码中不得有 stopped=true 赋值。
+    const codeOnly = doneBlock
+      .split('\n')
+      .map(line => line.replace(/\/\/.*$/, ''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+    expect(codeOnly).not.toMatch(/stopped\s*=\s*true/)
   })
 })

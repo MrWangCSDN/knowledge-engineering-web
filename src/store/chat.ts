@@ -325,7 +325,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               break
             }
             case 'done': {
-              stopped = true
+              // ⚠️ 不要在这里 set stopped=true（2026-05-16 修）：
+              // 后端在 done 之后还会（首轮异步总结时）发一个 session_title 事件。
+              // 若此处 stopped=true，下面的 `while (!stopped)` 循环立即退出、
+              // reader 停止读取 → session_title 永远收不到 → 侧栏标题不刷新。
+              // 循环的退出由 reader.read() 的 done=true（流自然结束）兜底，
+              // 后端总会在 done(+可选 session_title) 后关流，所以不会卡死。
               const metadata: MessageMetadata = {
                 entry_points: [],
                 cited_entities: [],
