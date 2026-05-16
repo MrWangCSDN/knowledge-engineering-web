@@ -14,6 +14,7 @@ import {
   deleteSession as apiDeleteSession,
   archiveSession as apiArchiveSession,
   unarchiveSession as apiUnarchiveSession,
+  renameSession as apiRenameSession,
 } from '@/api/sessions'
 import type { Session } from '@/types/session'
 
@@ -36,6 +37,10 @@ interface SessionStore {
   unarchiveSession: (projectId: string, sessionId: string) => Promise<void>
   /** SSE 流完成时由 chatStore 调，把新创建的 session 插到顶部。 */
   prependSession: (session: Session) => void
+  /** SSE session_title 事件用：直接改某 session 标题（不调 API）。 */
+  updateSessionTitle: (sessionId: string, title: string) => void
+  /** 用户手动重命名：乐观更新 + 调 API，失败回滚。 */
+  renameSession: (projectId: string, sessionId: string, title: string) => Promise<void>
   /** 清空（登出 / 切工程时）。 */
   reset: () => void
 }
@@ -106,6 +111,47 @@ export const useSessionStore = create<SessionStore>((set) => ({
         },
       }
     })
+  },
+
+  updateSessionTitle: (sessionId, title) => {
+    set(state => {
+      const next: Record<string, Session[]> = {}
+      // 跨所有 project 桶找到该 session 改 title（不依赖调用方知道 projectId）
+      for (const [pid, list] of Object.entries(state.sessionsByProject)) {
+        next[pid] = list.map(s => (s.id === sessionId ? { ...s, title } : s))
+      }
+      return { sessionsByProject: next }
+    })
+  },
+
+  renameSession: async (projectId, sessionId, title) => {
+    // 存旧标题用于回滚（zustand 允许在 action 内自引用 getState 读当前值）
+    const prev = useSessionStore
+      .getState()
+      .sessionsByProject[projectId]?.find(s => s.id === sessionId)?.title
+    // 乐观更新
+    set(state => ({
+      sessionsByProject: {
+        ...state.sessionsByProject,
+        [projectId]: (state.sessionsByProject[projectId] ?? []).map(s =>
+          s.id === sessionId ? { ...s, title } : s,
+        ),
+      },
+    }))
+    try {
+      await apiRenameSession(projectId, sessionId, title)
+    } catch (err) {
+      // 回滚到旧标题
+      set(state => ({
+        sessionsByProject: {
+          ...state.sessionsByProject,
+          [projectId]: (state.sessionsByProject[projectId] ?? []).map(s =>
+            s.id === sessionId ? { ...s, title: prev ?? s.title } : s,
+          ),
+        },
+      }))
+      throw err
+    }
   },
 
   reset: () => {

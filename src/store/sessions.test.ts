@@ -8,6 +8,7 @@ vi.mock('@/api/sessions', () => ({
   deleteSession: vi.fn(),
   archiveSession: vi.fn(),
   unarchiveSession: vi.fn(),
+  renameSession: vi.fn(),
 }))
 
 const mkSession = (over: Partial<Session> = {}): Session => ({
@@ -127,5 +128,48 @@ describe('useSessionStore: archive actions', () => {
     vi.mocked(sessionsApi.unarchiveSession).mockResolvedValue()
     await useSessionStore.getState().unarchiveSession('p1', 's1')
     expect(sessionsApi.unarchiveSession).toHaveBeenCalledWith('p1', 's1')
+  })
+})
+
+describe('useSessionStore: rename / updateSessionTitle', () => {
+  beforeEach(() => {
+    useSessionStore.getState().reset()
+    useSessionStore.setState({
+      sessionsByProject: {
+        p1: [
+          mkSession({ id: 's1', project_id: 'p1', title: '旧标题' }),
+          mkSession({ id: 's2', project_id: 'p1', title: '另一个' }),
+        ],
+      },
+    })
+    vi.clearAllMocks()
+  })
+
+  it('updateSessionTitle 改对应 session 的 title（不动别的）', () => {
+    useSessionStore.getState().updateSessionTitle('s1', '总结后的标题')
+    const list = useSessionStore.getState().sessionsByProject.p1
+    expect(list.find(s => s.id === 's1')!.title).toBe('总结后的标题')
+    expect(list.find(s => s.id === 's2')!.title).toBe('另一个')
+  })
+
+  it('renameSession 乐观更新 + 调 API', async () => {
+    vi.mocked(sessionsApi.renameSession).mockResolvedValue({
+      id: 's1', title: '新名', title_custom: true,
+    })
+    await useSessionStore.getState().renameSession('p1', 's1', '新名')
+    expect(sessionsApi.renameSession).toHaveBeenCalledWith('p1', 's1', '新名')
+    expect(
+      useSessionStore.getState().sessionsByProject.p1.find(s => s.id === 's1')!.title,
+    ).toBe('新名')
+  })
+
+  it('renameSession API 失败时回滚到旧标题', async () => {
+    vi.mocked(sessionsApi.renameSession).mockRejectedValue(new Error('boom'))
+    await expect(
+      useSessionStore.getState().renameSession('p1', 's1', '新名'),
+    ).rejects.toThrow()
+    expect(
+      useSessionStore.getState().sessionsByProject.p1.find(s => s.id === 's1')!.title,
+    ).toBe('旧标题')
   })
 })
