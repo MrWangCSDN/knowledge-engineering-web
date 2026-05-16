@@ -43,8 +43,12 @@ export function SessionMenu({ onArchive, onDelete, onRename }: Props) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-32">
         <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault()
+          onSelect={() => {
+            // 重命名：不 preventDefault —— 让 radix 正常关闭菜单并释放
+            // focus-scope，随后 SessionItem 的 inline <input autoFocus>
+            // 才能拿到并保住焦点（否则菜单仍开着会立刻把焦点抢回，
+            // 触发 input.onBlur → 编辑态被关掉）。trigger 按钮自身
+            // 已 stopPropagation，菜单关闭回焦不会触发外层导航。
             onRename()
           }}
           className="cursor-pointer"

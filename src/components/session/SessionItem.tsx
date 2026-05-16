@@ -24,15 +24,33 @@ export function SessionItem({ session, project }: Props) {
   const { sessionId: currentSessionId } = useParams<{ sessionId?: string }>()
   const archive = useSessionStore(s => s.archiveSession)
   const deleteSession = useSessionStore(s => s.deleteSession)
+  const renameSession = useSessionStore(s => s.renameSession)
 
   // 删除二次确认对话框开关
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  // inline 重命名编辑态 + 草稿值
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState(session.title || '')
 
   const isActive = currentSessionId === session.id
 
   const onClick = () => {
+    // 编辑态下点击不导航
+    if (isEditing) return
     // 切到对应工程的对应会话
     navigate(`/project/${project.id}/chat/${session.id}`)
+  }
+
+  // Enter / blur 提交：空值或未改 → 放弃（恢复原标题），否则乐观更新 + 调 API
+  const commitRename = async () => {
+    const next = draft.trim()
+    setIsEditing(false)
+    if (!next || next === session.title) return
+    try {
+      await renameSession(project.id, session.id, next)
+    } catch {
+      // store 内部已回滚；这里静默（后续可加 toast）
+    }
   }
 
   const doDelete = async () => {
@@ -61,12 +79,40 @@ export function SessionItem({ session, project }: Props) {
           }
         `}
       >
-        <span className="flex-1 truncate" title={session.title}>
-          {session.title || '(无标题)'}
-        </span>
+        {isEditing ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => {
+              e.stopPropagation()
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                commitRename()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                setIsEditing(false) // 取消，draft 丢弃
+              }
+            }}
+            onBlur={commitRename}
+            className="flex-1 bg-transparent border-b border-primary outline-none text-sm"
+          />
+        ) : (
+          <span className="flex-1 truncate" title={session.title}>
+            {session.title || '(无标题)'}
+          </span>
+        )}
 
         {/* 替换旧 Trash 按钮 + 二次确认为 SessionMenu（设计 §8.1） */}
         <SessionMenu
+          onRename={() => {
+            setDraft(session.title || '')
+            // 延后进入编辑态：等 radix 菜单关闭 + focus 归还 trigger 这一轮
+            // 结束后再渲染 <input autoFocus>，否则焦点会被 trigger 抢走，
+            // 触发 input.onBlur 立刻退出编辑（jsdom / 真实浏览器都有此竞态）。
+            setTimeout(() => setIsEditing(true), 0)
+          }}
           onArchive={async () => {
             try {
               await archive(project.id, session.id)
