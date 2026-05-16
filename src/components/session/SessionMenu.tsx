@@ -41,7 +41,16 @@ export function SessionMenu({ onArchive, onDelete, onRename }: Props) {
           <MoreHorizontal className="h-4 w-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-32">
+      <DropdownMenuContent
+        align="end"
+        className="w-32"
+        // 关键修复（2026-05-16）：阻止 radix 关菜单时把焦点归还 trigger 按钮。
+        // 否则「重命名」后 SessionItem 刚 mount 的 <input autoFocus> 会被
+        // radix focus-scope 立刻抢走焦点 → input.onBlur → 立即退出编辑
+        // → 用户「无法修改」。preventDefault 后焦点不回 trigger，
+        // 归档/删除不受影响（归档跳走、删除开 ConfirmDialog 自管焦点）。
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <DropdownMenuItem
           onSelect={() => {
             // 重命名：不 preventDefault —— 让 radix 正常关闭菜单并释放

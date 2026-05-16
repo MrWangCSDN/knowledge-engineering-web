@@ -5,7 +5,7 @@
  *
  * 设计文档：[[首页设计]] §3.4，[[会话归档-设计]] §8.1, §8.5
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useSessionStore } from '@/store/sessions'
@@ -31,6 +31,19 @@ export function SessionItem({ session, project }: Props) {
   // inline 重命名编辑态 + 草稿值
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState(session.title || '')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // 进入编辑态后显式聚焦 + 选中全文（比 autoFocus prop 在焦点竞态下更可靠，
+  // 且选中后用户可直接输入覆盖，体验对齐 ChatGPT 重命名）
+  useEffect(() => {
+    if (isEditing) {
+      const el = inputRef.current
+      if (el) {
+        el.focus()
+        el.select()
+      }
+    }
+  }, [isEditing])
 
   const isActive = currentSessionId === session.id
 
@@ -81,7 +94,7 @@ export function SessionItem({ session, project }: Props) {
       >
         {isEditing ? (
           <input
-            autoFocus
+            ref={inputRef}
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onClick={e => e.stopPropagation()}
