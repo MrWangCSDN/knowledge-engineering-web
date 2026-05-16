@@ -106,7 +106,7 @@ export function CodeBlock({ language, value, inline, children }: Props) {
   }
 
   return (
-    <div className="my-3 rounded-lg overflow-hidden border bg-card">
+    <div className="my-3 rounded-lg overflow-hidden border bg-code-bg">
       {/* Header: 语言名 + 复制按钮 */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b text-[12px]">
         <div className="flex items-center gap-1.5 text-muted-foreground">

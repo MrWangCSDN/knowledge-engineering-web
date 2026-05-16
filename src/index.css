@@ -90,6 +90,9 @@
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
 
+  /* 代码块专用底：比纯白页面深一档，让代码面板清晰区隔（ChatGPT 同款思路） */
+  --code-bg: oklch(0.96 0 0);  /* ≈ #F0F0F0 */
+
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
 
@@ -136,6 +139,10 @@
   --muted: oklch(0.32 0 0);
   --muted-foreground: oklch(0.74 0 0);  /* ≈ #BABABA，比 0.66 亮一档 */
 
+  /* 代码块专用底：比主区 #212121 深一档（≈ #1A1A1A），贴合 vscDarkPlus
+     编辑器底，代码面板与消息区清晰区隔（ChatGPT 同款思路） */
+  --code-bg: oklch(0.18 0 0);
+
   --accent: oklch(0.32 0 0);
   --accent-foreground: oklch(0.985 0 0);
 
@@ -161,6 +168,7 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-code-bg: var(--code-bg);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
