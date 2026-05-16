@@ -7,7 +7,7 @@
  *
  * 设计：[[会话归档-设计]] §8.1。
  */
-import { MoreHorizontal, Archive, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Archive, Trash2, Pencil } from 'lucide-react'
 
 import {
   DropdownMenu,
@@ -19,9 +19,10 @@ import {
 interface Props {
   onArchive: () => void
   onDelete: () => void
+  onRename: () => void
 }
 
-export function SessionMenu({ onArchive, onDelete }: Props) {
+export function SessionMenu({ onArchive, onDelete, onRename }: Props) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -41,6 +42,16 @@ export function SessionMenu({ onArchive, onDelete }: Props) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-32">
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault()
+            onRename()
+          }}
+          className="cursor-pointer"
+        >
+          <Pencil className="h-4 w-4 mr-2" />
+          <span>重命名</span>
+        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={(e) => {
             // 阻止 radix 默认关闭后还把焦点带出（避免触发外层 onClick）
