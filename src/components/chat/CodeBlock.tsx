@@ -6,7 +6,9 @@
  * 用 react-syntax-highlighter (prism async light)：
  *  - async = 按需注册语言，避免一次性 import 所有 grammar (200+KB)
  *  - 我们只注册 6 种常用语言：Java / Python / TS / JS / Bash / SQL / JSON
- *  - 暗主题用 vscDarkPlus，亮主题用 vs（VSCode 默认）
+ *  - 暗主题用 vscDarkPlus，亮主题用 oneLight（Atom One Light）
+ *    （原 vs / VSCode 浅色太淡、关键字几乎分不出来；oneLight 对比清晰，
+ *     视觉对齐 ChatGPT 浅色代码块。2026-05-16 改）
  *
  * 用法（一般通过 ReactMarkdown 的 components.code 钩子调用）:
  *   <CodeBlock language="java" value="public class Foo {}" />
@@ -14,7 +16,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check, Copy, Code2 } from 'lucide-react'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { vscDarkPlus, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 // 按需注册语言，避免 default bundle 太大
 import java from 'react-syntax-highlighter/dist/esm/languages/prism/java'
@@ -140,7 +142,7 @@ export function CodeBlock({ language, value, inline, children }: Props) {
       {/* 代码体：语法高亮 */}
       <SyntaxHighlighter
         language={lang || 'plaintext'}
-        style={theme === 'dark' ? vscDarkPlus : vs}
+        style={theme === 'dark' ? vscDarkPlus : oneLight}
         customStyle={{
           margin: 0,
           padding: '12px 14px',
