@@ -45,6 +45,19 @@ export async function deleteSession(
   )
 }
 
+/** 重命名会话。后端置 title_custom=true，异步总结将不再覆盖。 */
+export async function renameSession(
+  projectId: string,
+  sessionId: string,
+  title: string,
+): Promise<{ id: string; title: string; title_custom: boolean }> {
+  const { data } = await apiClient.patch(
+    `/projects/${encodeURIComponent(projectId)}/qa/sessions/${encodeURIComponent(sessionId)}`,
+    { title },
+  )
+  return data
+}
+
 /** 对 assistant 消息打 👍 / 👎（可选评论）。 */
 export async function voteMessage(args: {
   projectId: string

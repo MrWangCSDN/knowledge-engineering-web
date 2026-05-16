@@ -5,7 +5,12 @@
  * mock 掉 apiClient（axios 实例）让测试不发真请求。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { archiveSession, unarchiveSession, listArchivedSessions } from './sessions'
+import {
+  archiveSession,
+  unarchiveSession,
+  listArchivedSessions,
+  renameSession,
+} from './sessions'
 import { apiClient } from './client'
 
 vi.mock('./client', () => ({
@@ -13,6 +18,7 @@ vi.mock('./client', () => ({
     get: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
+    patch: vi.fn(),
   },
 }))
 
@@ -67,5 +73,24 @@ describe('sessions API: archive endpoints', () => {
     expect(result).toHaveLength(1)
     expect(result[0].project_id).toBe('p1')
     expect(result[0].sessions).toHaveLength(1)
+  })
+})
+
+describe('sessions API: renameSession', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('PATCHes /projects/{pid}/qa/sessions/{sid} with title', async () => {
+    vi.mocked(apiClient.patch).mockResolvedValue({
+      data: { id: 's1', title: '新名', title_custom: true },
+    })
+    const r = await renameSession('p1', 's1', '新名')
+    expect(apiClient.patch).toHaveBeenCalledWith(
+      '/projects/p1/qa/sessions/s1',
+      { title: '新名' },
+    )
+    expect(r.title).toBe('新名')
+    expect(r.title_custom).toBe(true)
   })
 })
