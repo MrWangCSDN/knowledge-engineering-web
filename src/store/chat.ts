@@ -362,6 +362,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               }
               break
             }
+            case 'session_title': {
+              // 后端首轮异步总结完成，推来新标题 → 实时刷新侧栏
+              // 设计：[[会话标题-重命名与智能总结-设计]] §4.2
+              const sid = data.session_id as string
+              const title = data.title as string
+              if (sid && title) {
+                useSessionStore.getState().updateSessionTitle(sid, title)
+              }
+              break
+            }
             case 'error': {
               stopped = true
               const errMsg = (data.message as string) ?? '未知错误'
