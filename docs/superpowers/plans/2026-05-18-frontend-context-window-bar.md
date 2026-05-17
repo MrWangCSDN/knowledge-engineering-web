@@ -108,8 +108,12 @@ describe('chat store contextUsage 接线', () => {
     expect(nextCaseIdx).toBeGreaterThan(metaIdx)
     const metaBlock = src.slice(metaIdx, nextCaseIdx)
     expect(metaBlock).toContain('contextUsage')
-    expect(metaBlock).toContain("typeof")
     expect(metaBlock).toContain('context_usage')
+    // 全字段形状校验（Fix：防止只验 pct 后 as ContextUsage 存残缺对象）
+    expect(metaBlock).toContain("typeof (cu as { pct?: unknown }).pct === 'number'")
+    expect(metaBlock).toContain('used_tokens')
+    expect(metaBlock).toContain('window_tokens')
+    expect(metaBlock).toContain('history_trimmed')
   })
 
   it('源码不变量：loadSession 切会话时一并清 contextUsage（无串台）', () => {
@@ -118,7 +122,7 @@ describe('chat store contextUsage 接线', () => {
     const abortIdx = src.indexOf('abort:', lsIdx)
     expect(lsIdx).toBeGreaterThan(-1)
     const lsBlock = src.slice(lsIdx, abortIdx)
-    expect(lsBlock).toContain('contextUsage')
+    expect(lsBlock).toContain('contextUsage: null')
   })
 })
 ```
@@ -337,11 +341,15 @@ import type {
             case 'meta': {
               metaSessionId = (data.session_id as string) ?? metaSessionId
               metaMessageId = (data.message_id as string) ?? null
-              // 上下文窗口用量（设计 §5.2）：形状校验，缺失/非法一律 null，绝不抛
+              // 上下文窗口用量（设计 §5.2/§6）：全字段形状校验，任一缺失/类型不符
+              // 一律存 null（绝不抛、绝不存结构残缺对象——否则进度条 NaN%/徽标失效）
               const cu = data.context_usage
               const validCu =
                 cu != null && typeof cu === 'object' &&
-                typeof (cu as { pct?: unknown }).pct === 'number'
+                typeof (cu as { pct?: unknown }).pct === 'number' &&
+                typeof (cu as { used_tokens?: unknown }).used_tokens === 'number' &&
+                typeof (cu as { window_tokens?: unknown }).window_tokens === 'number' &&
+                typeof (cu as { history_trimmed?: unknown }).history_trimmed === 'boolean'
               // 创建空的 streamingMessage
               set({
                 streamingMessage: {

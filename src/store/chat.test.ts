@@ -119,8 +119,12 @@ describe('chat store contextUsage 接线', () => {
     expect(nextCaseIdx).toBeGreaterThan(metaIdx)
     const metaBlock = src.slice(metaIdx, nextCaseIdx)
     expect(metaBlock).toContain('contextUsage')
-    expect(metaBlock).toContain("typeof")
     expect(metaBlock).toContain('context_usage')
+    // 全字段形状校验（Fix：防止只验 pct 后 as ContextUsage 存残缺对象）
+    expect(metaBlock).toContain("typeof (cu as { pct?: unknown }).pct === 'number'")
+    expect(metaBlock).toContain('used_tokens')
+    expect(metaBlock).toContain('window_tokens')
+    expect(metaBlock).toContain('history_trimmed')
   })
 
   it('源码不变量：loadSession 切会话时一并清 contextUsage（无串台）', () => {
@@ -129,6 +133,6 @@ describe('chat store contextUsage 接线', () => {
     const abortIdx = src.indexOf('abort:', lsIdx)
     expect(lsIdx).toBeGreaterThan(-1)
     const lsBlock = src.slice(lsIdx, abortIdx)
-    expect(lsBlock).toContain('contextUsage')
+    expect(lsBlock).toContain('contextUsage: null')
   })
 })
