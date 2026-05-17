@@ -102,4 +102,28 @@ describe('ContextWindowBar', () => {
     const fill = screen.getByRole('progressbar').querySelector('[data-fill]')
     expect(fill).toHaveStyle({ width: '100%' })
   })
+
+  it('pct 负值 → clamp 到 0；ok 文案显 0% 不外泄负数', () => {
+    setCU({ ...base, pct: -5 })
+    render(<ContextWindowBar />)
+    const bar = screen.getByRole('progressbar')
+    const fill = bar.querySelector('[data-fill]')
+    expect(fill).toHaveStyle({ width: '0%' })
+    expect(bar).toHaveAttribute('aria-valuenow', '0')
+    expect(screen.getByText('0%')).toBeInTheDocument()
+  })
+
+  it('pct=150 → danger 红 + 文案"剩余 0% 直到自动压缩"', () => {
+    setCU({ ...base, pct: 150 })
+    render(<ContextWindowBar />)
+    const fill = screen.getByRole('progressbar').querySelector('[data-fill]')
+    expect(fill?.className).toContain('bg-context-danger')
+    expect(screen.getByText(/剩余 0% 直到自动压缩/)).toBeInTheDocument()
+  })
+
+  it('pct 小数 95.1 → 剩余文案整数化（无浮点垃圾 4.900…）', () => {
+    setCU({ ...base, pct: 95.1 })
+    render(<ContextWindowBar />)
+    expect(screen.getByText('剩余 5% 直到自动压缩')).toBeInTheDocument()
+  })
 })

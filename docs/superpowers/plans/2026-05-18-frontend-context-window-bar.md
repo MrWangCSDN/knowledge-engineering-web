@@ -672,6 +672,30 @@ describe('ContextWindowBar', () => {
     const fill = screen.getByRole('progressbar').querySelector('[data-fill]')
     expect(fill).toHaveStyle({ width: '100%' })
   })
+
+  it('pct 负值 → clamp 到 0；ok 文案显 0% 不外泄负数', () => {
+    setCU({ ...base, pct: -5 })
+    render(<ContextWindowBar />)
+    const bar = screen.getByRole('progressbar')
+    const fill = bar.querySelector('[data-fill]')
+    expect(fill).toHaveStyle({ width: '0%' })
+    expect(bar).toHaveAttribute('aria-valuenow', '0')
+    expect(screen.getByText('0%')).toBeInTheDocument()
+  })
+
+  it('pct=150 → danger 红 + 文案"剩余 0% 直到自动压缩"', () => {
+    setCU({ ...base, pct: 150 })
+    render(<ContextWindowBar />)
+    const fill = screen.getByRole('progressbar').querySelector('[data-fill]')
+    expect(fill?.className).toContain('bg-context-danger')
+    expect(screen.getByText(/剩余 0% 直到自动压缩/)).toBeInTheDocument()
+  })
+
+  it('pct 小数 95.1 → 剩余文案整数化（无浮点垃圾 4.900…）', () => {
+    setCU({ ...base, pct: 95.1 })
+    render(<ContextWindowBar />)
+    expect(screen.getByText('剩余 5% 直到自动压缩')).toBeInTheDocument()
+  })
 })
 ```
 
@@ -703,18 +727,23 @@ export function ContextWindowBar() {
   const cu = useChatStore(s => s.contextUsage)
   if (cu == null) return null
 
-  // 后端已 clamp，组件再防御一次（越界/脏数据不破版）
+  // 后端已 clamp，组件再防御一次（越界/脏数据不破版；负值/超界都不外泄到文案）
   const pct = Math.min(100, Math.max(0, cu.pct))
   const state: keyof typeof FILL_CLASS =
     pct <= 80 ? 'ok' : pct <= 95 ? 'warn' : 'danger'
-  const remaining = Math.max(0, 100 - pct)
+  // round：pct 后端带 1 位小数，100 - 95.1 在 IEEE754 下 = 4.9000…06，
+  // 不 round 会把浮点垃圾渲染进文案；用整数百分比（Claude Code 极简风）
+  const remaining = Math.round(Math.max(0, 100 - pct))
+  const ariaNow = Math.round(pct)
 
   return (
     <div className="max-w-3xl mx-auto w-full mb-1.5">
+      {/* bg-border：复用边框中性色作未填充轨道底（light/dark 双档已有）；
+          如将来需与边框解耦可提 --context-track，本期 YAGNI 不新增（设计 §5.3） */}
       <div
         role="progressbar"
         aria-label="上下文窗口使用量"
-        aria-valuenow={pct}
+        aria-valuenow={ariaNow}
         aria-valuemin={0}
         aria-valuemax={100}
         title={`已用 ~${cu.used_tokens} / ${cu.window_tokens} tokens`}
@@ -728,7 +757,7 @@ export function ContextWindowBar() {
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {state === 'ok'
-          ? `${cu.pct}%`
+          ? `${pct}%`
           : `剩余 ${remaining}% 直到自动压缩`}
         {cu.history_trimmed && ' · 已自动压缩较早历史以继续对话'}
       </p>
