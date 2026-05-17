@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useSessionStore } from './sessions'
+import { useChatStore } from './chat'
 import type { Session } from '@/types/session'
 
 const mkSession = (over: Partial<Session> = {}): Session => ({
@@ -77,5 +78,57 @@ describe('chat.ts SSE 控制流不变量', () => {
       .join(' ')
       .replace(/\s+/g, ' ')
     expect(codeOnly).not.toMatch(/stopped\s*=\s*true/)
+  })
+})
+
+/**
+ * §上下文窗口前端展示：contextUsage 状态接线
+ * 房规：SSE parser 是 sendMessage 内闭包不可单测 → ①真实 action 契约 ②源码不变量
+ * （沿用本文件既有 case 'done' 不变量测试手法）。设计：[[上下文窗口前端展示-设计]] §5.2/§6
+ */
+describe('chat store contextUsage 接线', () => {
+  beforeEach(() => {
+    useChatStore.getState().reset()
+  })
+
+  it('初始 contextUsage 为 null', () => {
+    expect(useChatStore.getState().contextUsage).toBeNull()
+  })
+
+  it('startNew 后 contextUsage 归 null（不跨会话泄漏）', () => {
+    useChatStore.setState({
+      contextUsage: { used_tokens: 1, window_tokens: 2, pct: 50, history_trimmed: false },
+    })
+    useChatStore.getState().startNew('p1')
+    expect(useChatStore.getState().contextUsage).toBeNull()
+  })
+
+  it('reset 后 contextUsage 归 null', () => {
+    useChatStore.setState({
+      contextUsage: { used_tokens: 1, window_tokens: 2, pct: 50, history_trimmed: false },
+    })
+    useChatStore.getState().reset()
+    expect(useChatStore.getState().contextUsage).toBeNull()
+  })
+
+  it("源码不变量：case 'meta' 块内写入 contextUsage（含形状校验 + null 兜底）", () => {
+    const src = readFileSync('src/store/chat.ts', 'utf-8')
+    const metaIdx = src.indexOf("case 'meta':")
+    const nextCaseIdx = src.indexOf("case 'tool_call':", metaIdx)
+    expect(metaIdx).toBeGreaterThan(-1)
+    expect(nextCaseIdx).toBeGreaterThan(metaIdx)
+    const metaBlock = src.slice(metaIdx, nextCaseIdx)
+    expect(metaBlock).toContain('contextUsage')
+    expect(metaBlock).toContain("typeof")
+    expect(metaBlock).toContain('context_usage')
+  })
+
+  it('源码不变量：loadSession 切会话时一并清 contextUsage（无串台）', () => {
+    const src = readFileSync('src/store/chat.ts', 'utf-8')
+    const lsIdx = src.indexOf('loadSession:')
+    const abortIdx = src.indexOf('abort:', lsIdx)
+    expect(lsIdx).toBeGreaterThan(-1)
+    const lsBlock = src.slice(lsIdx, abortIdx)
+    expect(lsBlock).toContain('contextUsage')
   })
 })

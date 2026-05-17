@@ -129,6 +129,16 @@ export interface SSEEvent<T = unknown> {
 
 // ─── 各 SSE 事件的 data payload 类型（按 spec §6.4）──────────────────────
 
+/** 上下文窗口用量（后端 qa_router 每轮经 meta 事件发；设计 §5.1）。 */
+export interface ContextUsage {
+  used_tokens: number
+  window_tokens: number
+  /** 后端已 clamp 0–100、1 位小数。 */
+  pct: number
+  /** 本轮是否触发了 §18 自动裁史/压缩。 */
+  history_trimmed: boolean
+}
+
 export interface MetaPayload {
   session_id: string
   message_id: string
@@ -140,6 +150,8 @@ export interface MetaPayload {
   route_source?: string
   /** v1.1：关键词路径命中的具体词（用于 UI 解释"识别到 X / Y"）。 */
   matched_keywords?: string[]
+  /** 上下文窗口用量（旧后端/ chit-chat 不发 → 可选）。设计 §5.1 */
+  context_usage?: ContextUsage
 }
 
 export interface StepPayload {

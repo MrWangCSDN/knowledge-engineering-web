@@ -31,6 +31,7 @@ import type {
   Reference,
   MessageMetadata,
   ToolCallPayload,
+  ContextUsage,
 } from '@/types/chat'
 import type { Session } from '@/types/session'
 
@@ -89,10 +90,12 @@ interface ChatStore {
   error: string | null
   /** 中止控制器（用户点 ⏸ 停止时调）。 */
   _abortCtrl: AbortController | null
+  /** 上下文窗口用量（每轮 meta 刷新；新会话/切会话/重置归 null）。设计 §5.2 */
+  contextUsage: ContextUsage | null
 
   // ─── actions ───
-  /** 切换激活会话（URL 变化时调）。会触发后端拉取消息历史。 */
-  loadSession: (projectId: string, sessionId: string) => Promise<void>
+  /** 切换激活会话（URL 变化时调）。会触发后端拉取消息历史。同时归零 contextUsage 防串台。 */
+  loadSession: (projectId: string, sessionId: string) => Promise<void>  // resets contextUsage
   /** 开始一个新对话（清空消息）。 */
   startNew: (projectId: string) => void
   /** 发送一条消息 → POST /qa/explain → 接 SSE 流。 */
@@ -121,6 +124,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   status: 'idle',
   error: null,
   _abortCtrl: null,
+  contextUsage: null,
 
   startNew: (projectId: string) => {
     set({
@@ -130,6 +134,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       streamingMessage: null,
       status: 'idle',
       error: null,
+      contextUsage: null,
     })
   },
 
@@ -143,6 +148,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         messages: detail.messages,
         streamingMessage: null,
         status: 'idle',
+        contextUsage: null,
       })
     } catch (err) {
       set({ status: 'error', error: (err as Error).message })
@@ -225,6 +231,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             case 'meta': {
               metaSessionId = (data.session_id as string) ?? metaSessionId
               metaMessageId = (data.message_id as string) ?? null
+              // 上下文窗口用量（设计 §5.2）：形状校验，缺失/非法一律 null，绝不抛
+              const cu = data.context_usage
+              const validCu =
+                cu != null && typeof cu === 'object' &&
+                typeof (cu as { pct?: unknown }).pct === 'number'
               // 创建空的 streamingMessage
               set({
                 streamingMessage: {
@@ -237,6 +248,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   created_at: new Date().toISOString(),
                 },
                 currentSessionId: metaSessionId,
+                contextUsage: validCu ? (cu as ContextUsage) : null,
               })
               break
             }
@@ -433,6 +445,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       status: 'idle',
       error: null,
       _abortCtrl: null,
+      contextUsage: null,
     })
   },
 }))
