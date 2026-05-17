@@ -94,8 +94,8 @@ interface ChatStore {
   contextUsage: ContextUsage | null
 
   // ─── actions ───
-  /** 切换激活会话（URL 变化时调）。会触发后端拉取消息历史。同时归零 contextUsage 防串台。 */
-  loadSession: (projectId: string, sessionId: string) => Promise<void>  // resets contextUsage
+  /** 切换激活会话（URL 变化时调）。会触发后端拉取消息历史。 */
+  loadSession: (projectId: string, sessionId: string) => Promise<void>
   /** 开始一个新对话（清空消息）。 */
   startNew: (projectId: string) => void
   /** 发送一条消息 → POST /qa/explain → 接 SSE 流。 */

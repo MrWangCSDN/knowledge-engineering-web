@@ -114,7 +114,7 @@ describe('chat store contextUsage 接线', () => {
 
   it('源码不变量：loadSession 切会话时一并清 contextUsage（无串台）', () => {
     const src = readFileSync('src/store/chat.ts', 'utf-8')
-    const lsIdx = src.indexOf('loadSession:')
+    const lsIdx = src.indexOf('loadSession: async')
     const abortIdx = src.indexOf('abort:', lsIdx)
     expect(lsIdx).toBeGreaterThan(-1)
     const lsBlock = src.slice(lsIdx, abortIdx)
