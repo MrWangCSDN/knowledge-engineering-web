@@ -921,13 +921,13 @@ EOF
 ## Task 5: 回归 + 类型/构建验证（无新文件/commit）
 
 - [ ] **Step 1: 全量测试** —— Run: `cd /Users/java/knowledge-engineering-web && npm run test:run`
-  Expected: 0 fail（新增 ~21 项；既有 chat/session/tool-call 等不回归——纯新增字段 + 新组件，未改既有行为）。
+  Expected: 0 fail（新增 ~23 项；既有 chat/session/tool-call 等不回归——纯新增字段 + 新组件，未改既有行为）。实测 2026-05-18：35 files / 173 tests 全过。
 
-- [ ] **Step 2: 类型 + 构建** —— Run: `cd /Users/java/knowledge-engineering-web && npx tsc -b`
-  Expected: 退出码 0，无类型错误（`ContextUsage` 全链路一致：types→store→组件）。
+- [ ] **Step 2: 类型（基线对比，非"退出码 0"）** —— Run: `cd /Users/java/knowledge-engineering-web && npx tsc -b 2>&1 | grep -c "error TS"`
+  Expected: 该仓库有 **39 个既有 tsc 错误**（与本功能无关，预先存在）。门槛是**净新增 = 0**：本功能落地后总数仍为 39（实测 2026-05-18：39 = 基线，`ContextUsage` 全链路 types→store→组件 类型一致，零净新增）。不要求退出码 0（既有错误不在本次范围）。
 
-- [ ] **Step 3: Lint** —— Run: `cd /Users/java/knowledge-engineering-web && npm run lint`
-  Expected: 无新增 error（沿用既有风格；新文件无 `any` 滥用）。
+- [ ] **Step 3: Lint** —— Run: `cd /Users/java/knowledge-engineering-web && npx eslint <本功能新建/改动文件>`
+  Expected: **新建文件 100% 干净**；改动文件（ChatPage.tsx）原有的 2 个 `react-hooks/set-state-in-effect`（`setArchivedAt` 既有 effect，L48-51）为**预先存在**，不在本次 2 行 diff 内，非回归（实测 2026-05-18 已逐行核验）。
 
 > 端到端（控制器在 Preview/浏览器跑，不在 subagent 范围）：本地 dev(5173) 连后端，发几轮长对话，观察输入框上方进度条颜色随 pct 变（蓝→黄→红）、history_trimmed 时出现"已自动压缩较早历史"；**切 light/dark 两主题各看一遍**（前端宪法自检：对比度、暗色不脏块、状态色暗变体足够亮）；新会话/切会话进度条清零不串台。截图留证。
 
