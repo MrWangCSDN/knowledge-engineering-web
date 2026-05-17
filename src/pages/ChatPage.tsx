@@ -18,6 +18,7 @@ import { getSessionDetail } from '@/api/sessions'
 import { EmptyState } from '@/components/chat/EmptyState'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
+import { ContextWindowBar } from '@/components/chat/ContextWindowBar'
 
 export function ChatPage() {
   const { projectId, sessionId } = useParams<{ projectId: string, sessionId?: string }>()
@@ -197,6 +198,7 @@ export function ChatPage() {
       {error && <ErrorBar message={error} />}
 
       <div className="px-4 py-3 bg-background">
+        <ContextWindowBar />
         <ChatInput
           onSend={handleSend}
           loading={isLoading}
