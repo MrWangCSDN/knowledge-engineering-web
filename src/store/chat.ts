@@ -45,6 +45,42 @@ function tryParseJSON(s: string): unknown {
   try { return JSON.parse(s) } catch { return s }
 }
 
+/** 默认模型上下文窗口（与后端 KE_MODEL_CONTEXT_WINDOW 一致：1M tokens）。 */
+const _DEFAULT_CTX_WINDOW = 1_000_000
+
+/** 单条消息估算 tokens（与后端 estimate_tokens 公式对齐：1 token ≈ 1.5 字符）。
+ *
+ * Claude Code 风格的"会话累计 token 显示"基础。assistant 真实内容在 sections 里，
+ * 不能只看 m.content（参 chat.ts:188 注释）。
+ */
+function estimateMessageTokens(m: Pick<Message, 'content' | 'sections' | 'role'>): number {
+  let text = m.content || ''
+  // assistant：真实内容在 sections，content 通常空
+  if ((!text || text.trim() === '') && m.sections && m.sections.length > 0) {
+    text = m.sections.map(s => (s.title ? s.title + s.content : s.content)).join('')
+  }
+  // Math.ceil 保守偏大（同后端 context_budget.estimate_tokens）
+  return Math.ceil(text.length / 1.5)
+}
+
+/** 由 messages 数组累计算会话整体 token 用量（Claude Code 风：累计而非本轮）。
+ *
+ * 替代后端 SSE meta 的"本轮注入量"语义 — 后端的本轮量只能反映 prompt 压力，
+ * 但用户期望看到"整个会话至今用了多少 tokens"。每轮 done 后重算即可。
+ */
+function computeUsageFromMessages(messages: Message[]): ContextUsage {
+  const used = messages.reduce((acc, m) => acc + estimateMessageTokens(m), 0)
+  const window = _DEFAULT_CTX_WINDOW
+  // Math.min clamp 防超 100%（极端长会话）；pct 1 位小数与后端一致
+  const pct = window > 0 ? Math.min(100, (used / window) * 100) : 0
+  return {
+    used_tokens: used,
+    window_tokens: window,
+    pct: Math.round(pct * 10) / 10,
+    history_trimmed: false,  // 累计语义下 trim 信息由 SSE meta 单独保留（见 done 事件）
+  }
+}
+
 /** 累积流式答案的工具：根据 section type 找/建段、累 delta、补 references。 */
 function applyContentDelta(
   sections: Section[],
@@ -142,15 +178,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ status: 'submitting', error: null })
     try {
       const detail = await getSessionDetail(projectId, sessionId)
+      // 切到已有会话：从 messages 累计算 context window 用量
+      // （Claude Code 风：进度条始终反映"当前会话累计 tokens"，不区分新/旧 session）
       set({
         currentSessionId: sessionId,
         currentProjectId: projectId,
         messages: detail.messages,
         streamingMessage: null,
         status: 'idle',
-        contextUsage: null,
+        contextUsage: computeUsageFromMessages(detail.messages),
       })
     } catch (err) {
+      // 404 = sessionId 失效（用户切账号后 URL 残留 / session 已被删 / 跨用户访问被拒）
+      // 不要把 404 错误 banner 抛给用户，回退到 startNew 状态即可，由 ChatPage 监听
+      // currentSessionId=null 触发 URL 重定向到 /project/{projectId}（清掉残留尾巴）
+      const axErr = err as { response?: { status?: number } }
+      if (axErr?.response?.status === 404) {
+        set({
+          currentSessionId: null,
+          currentProjectId: projectId,
+          messages: [],
+          streamingMessage: null,
+          status: 'idle',
+          contextUsage: null,
+          error: null,
+        })
+        return
+      }
       set({ status: 'error', error: (err as Error).message })
     }
   },
@@ -183,10 +237,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const ctrl = new AbortController()
     set({ _abortCtrl: ctrl })
 
-    // 取最近 10 条历史发给后端（多轮对话）
-    const history = get().messages.slice(-10).map(m => ({
-      role: m.role, content: m.content,
-    }))
+    // 取最近 20 条历史发给后端（多轮对话）
+    // 历史 bug：曾经只取 slice(-10) → 多轮长对话早期信息丢失（5 种算法只答 2 种）
+    // 改 20 是临时缓和（仍依赖后端 §18 trim_history_to_budget 按 token 兜底）；
+    // 根治方案待 S6 后端直接从 fs 读 messages，前端不再传 history。
+    //
+    // 双重 bug：assistant 的真正回答在 m.sections（6 段式或单段 chit-chat），
+    // 而 m.content 通常是空字符串。原代码直接 m.content → LLM 看到的历史只剩
+    // user 提问 + assistant 空回复 → 上下文等同没记忆（"java 排序算法" 只答 2 种）。
+    // 修：assistant 优先取 sections 文本拼接；为空才 fallback 到 content。
+    const history = get().messages.slice(-20).map(m => {
+      let text = m.content || ''
+      if ((!text || text.trim() === '') && m.sections && m.sections.length > 0) {
+        // 多段式（business 6 段）：用 markdown 风格拼回，保留语义边界；
+        // chit-chat 单段：title 为空，直接取 content
+        text = m.sections.map(s => (s.title ? `## ${s.title}\n${s.content}` : s.content)).join('\n\n')
+      }
+      return { role: m.role, content: text }
+    })
 
     try {
       const baseUrl = (apiClient.defaults.baseURL || '/api').replace(/\/+$/, '')
@@ -203,6 +271,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           question,
           session_id: get().currentSessionId,
           history,
+          // 多模型支持（2026-05-21）：发当前用户的 preferred_model
+          // 后端校验 + 兜底：未知 model 自动回退默认（详见 llm_factory.get_llm_provider）
+          // 若 user 未设置 preferred_model（首次登录），传 null，后端走 DEFAULT_MODEL_ID
+          model: useAuthStore.getState().user?.preferred_model ?? null,
         }),
         credentials: 'include',
         signal: ctrl.signal,
@@ -360,11 +432,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   ...s.streamingMessage,
                   metadata,
                 }
+                const nextMessages = [...s.messages, finalMsg]
+                // Claude Code 风进度条：done 后重算累计 token（覆盖 meta 阶段的本轮注入量）。
+                // 保留 meta 阶段拿到的 history_trimmed 标志（若 SSE 已提示"自动压缩"则保留提示）。
+                const usage = computeUsageFromMessages(nextMessages)
+                if (s.contextUsage?.history_trimmed) {
+                  usage.history_trimmed = true
+                }
                 return {
-                  messages: [...s.messages, finalMsg],
+                  messages: nextMessages,
                   streamingMessage: null,
                   status: 'idle',
                   _abortCtrl: null,
+                  contextUsage: usage,
                 }
               })
 

@@ -127,12 +127,17 @@ describe('chat store contextUsage 接线', () => {
     expect(metaBlock).toContain('history_trimmed')
   })
 
-  it('源码不变量：loadSession 切会话时一并清 contextUsage（无串台）', () => {
+  it('源码不变量：loadSession 切会话时从 messages 累计算 contextUsage（Claude Code 风进度条）', () => {
+    // 2026-05-21 重构：切到已有会话时，进度条要继续展示该会话的累计 tokens
+    // （以前是清 null → 切会话进度条消失；改造后必须主动算出）
     const src = readFileSync('src/store/chat.ts', 'utf-8')
     const lsIdx = src.indexOf('loadSession: async')
     const abortIdx = src.indexOf('abort:', lsIdx)
     expect(lsIdx).toBeGreaterThan(-1)
     const lsBlock = src.slice(lsIdx, abortIdx)
-    expect(lsBlock).toContain('contextUsage: null')
+    // 关键不变量：loadSession 必须显式设 contextUsage（不能让上个会话数据残留）；
+    // 且来源是 computeUsageFromMessages（由 messages 累计算，非旧 SSE meta 残留）
+    expect(lsBlock).toContain('contextUsage:')
+    expect(lsBlock).toContain('computeUsageFromMessages(detail.messages)')
   })
 })

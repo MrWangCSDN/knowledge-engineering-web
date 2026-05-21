@@ -79,15 +79,19 @@ export function ChatPage() {
   useEffect(() => {
     if (!projectId) return
     const live = useChatStore.getState()
-    if (live.currentProjectId && live.currentProjectId !== projectId) {
-      startNew(projectId)
-      return
-    }
+    // 优先级 1：URL 有 sessionId → 总是 loadSession（不管 project 变没变）
+    // 历史 bug：原代码先判 project 变化 → startNew + return → 永远跳过 loadSession
+    // 复现：alice 在 proj-a 看会话 A → 点 sidebar 中 proj-b 会话 B → useEffect
+    // 看 currentProjectId='proj-a' ≠ 'proj-b' → startNew('proj-b') 清空 messages → return
+    // → 永远不会 loadSession('proj-b','sess_B') → 主区 EmptyState
+    // 修：sessionId 存在时无条件 loadSession（loadSession 内部会重写 currentProjectId）
     if (sessionId) {
       if (sessionId !== live.currentSessionId) loadSession(projectId, sessionId)
-    } else {
-      if (live.currentSessionId) startNew(projectId)
-      else if (!live.currentProjectId) startNew(projectId)
+      return
+    }
+    // 优先级 2：URL 无 sessionId → 仅在「project 变了」或「之前有 session 残留」时 startNew
+    if (live.currentProjectId !== projectId || live.currentSessionId) {
+      startNew(projectId)
     }
   }, [projectId, sessionId, loadSession, startNew])
 
@@ -103,10 +107,19 @@ export function ChatPage() {
   // - 快速 streaming 后 currentSessionId 已 set → 拿到最新值 navigate ✓
   useEffect(() => {
     const liveSessionId = useChatStore.getState().currentSessionId
+    // 方向 ①：store 有 / URL 无 → 回填（新会话拿到真 sid 后写回 URL）
     if (liveSessionId && projectId && !sessionId) {
       navigate(`/project/${projectId}/chat/${liveSessionId}`, { replace: true })
+      return
     }
-  }, [currentSessionId, projectId, sessionId, navigate])
+    // 方向 ②：URL 有 / store 无 + status='idle'（loadSession 已结束）→ URL 无效
+    // 复现：切账号后浏览器还停在 /chat/sess_old_alice URL → bob 登录 → loadSession 拿 404
+    // → store 清空 currentSessionId/messages → URL 依然指向无效 sid → 主区显示错误 banner
+    // 修：把 URL 的尾巴去掉，回到 /project/{projectId} EmptyState
+    if (sessionId && !liveSessionId && projectId && status === 'idle') {
+      navigate(`/project/${projectId}`, { replace: true })
+    }
+  }, [currentSessionId, projectId, sessionId, navigate, status])
 
   // 工程未就绪 / 找不到的兜底
   if (isLoadingProjects) {

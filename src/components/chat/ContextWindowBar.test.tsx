@@ -1,13 +1,14 @@
 /**
  * src/components/chat/ContextWindowBar.test.tsx
  *
- * 验证 ContextWindowBar：
+ * 验证 ContextWindowBar（Claude Code 风格 — 2026-05-21 改造）：
  *   - contextUsage=null → 不渲染
  *   - 三态阈值：pct≤80 ok蓝 / 80<pct≤95 warn黄 / pct>95 danger红
- *   - 文案：ok 显 {pct}%；warn/danger 显"剩余 X% 直到自动压缩"
+ *   - 标题行格式："Context window" + "{usedFmt} / {windowFmt} ({pct}%)"
+ *   - formatTokens：n<1k 原数 / <1M 1.x k / ≥1M 1.x M
  *   - history_trimmed → 追加"已自动压缩较早历史"
- *   - role=progressbar + aria-valuenow；title 含 used/window
- * 设计：[[上下文窗口前端展示-设计]] §5.4
+ *   - role=progressbar + aria-valuenow；title 含 used/window 缩写
+ * 设计：[[上下文窗口前端展示-设计]] §5.4（Claude Code 视觉对齐版本）
  */
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -20,7 +21,7 @@ function setCU(cu: ContextUsage | null) {
   useChatStore.setState({ contextUsage: cu })
 }
 const base: ContextUsage = {
-  used_tokens: 1200, window_tokens: 1000000, pct: 50, history_trimmed: false,
+  used_tokens: 500_000, window_tokens: 1_000_000, pct: 50, history_trimmed: false,
 }
 
 describe('ContextWindowBar', () => {
@@ -34,8 +35,8 @@ describe('ContextWindowBar', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('pct=50 → ok 蓝，文案显 50%，progressbar aria 正确', () => {
-    setCU({ ...base, pct: 50 })
+  it('pct=50 → ok 蓝，标题行 "Context window" + "500.0k / 1.0M (50%)"', () => {
+    setCU({ ...base, pct: 50, used_tokens: 500_000, window_tokens: 1_000_000 })
     render(<ContextWindowBar />)
     const bar = screen.getByRole('progressbar')
     expect(bar).toHaveAttribute('aria-valuenow', '50')
@@ -45,15 +46,16 @@ describe('ContextWindowBar', () => {
     const fill = bar.querySelector('[data-fill]')
     expect(fill?.className).toContain('bg-context-ok')
     expect(fill).toHaveStyle({ width: '50%' })
-    expect(screen.getByText('50%')).toBeInTheDocument()
+    // 新文案：Claude Code 风
+    expect(screen.getByText('Context window')).toBeInTheDocument()
+    expect(screen.getByText('500.0k / 1.0M (50%)')).toBeInTheDocument()
   })
 
-  it('pct=85 → warn 黄，文案"剩余 15% 直到自动压缩"', () => {
+  it('pct=85 → warn 黄（颜色变，文案统一不变）', () => {
     setCU({ ...base, pct: 85 })
     render(<ContextWindowBar />)
     const fill = screen.getByRole('progressbar').querySelector('[data-fill]')
     expect(fill?.className).toContain('bg-context-warn')
-    expect(screen.getByText(/剩余 15% 直到自动压缩/)).toBeInTheDocument()
   })
 
   it('pct=97 → danger 红', () => {
@@ -61,7 +63,6 @@ describe('ContextWindowBar', () => {
     render(<ContextWindowBar />)
     const fill = screen.getByRole('progressbar').querySelector('[data-fill]')
     expect(fill?.className).toContain('bg-context-danger')
-    expect(screen.getByText(/剩余 3% 直到自动压缩/)).toBeInTheDocument()
   })
 
   it('边界 pct=80 → ok；pct=80.1 → warn；pct=95 → warn；pct=95.1 → danger', () => {
@@ -88,11 +89,11 @@ describe('ContextWindowBar', () => {
     expect(screen.getByText(/已自动压缩较早历史以继续对话/)).toBeInTheDocument()
   })
 
-  it('title 含 used/window 原始数（极简版唯一原始数字处）', () => {
-    setCU({ ...base, pct: 50, used_tokens: 1234, window_tokens: 1000000 })
+  it('title 含 used/window tokens 缩写（hover 显示）', () => {
+    setCU({ ...base, pct: 32, used_tokens: 320_300, window_tokens: 1_000_000 })
     render(<ContextWindowBar />)
     expect(screen.getByRole('progressbar')).toHaveAttribute(
-      'title', '已用 ~1234 / 1000000 tokens',
+      'title', '320.3k / 1.0M tokens (32%)',
     )
   })
 
@@ -103,27 +104,37 @@ describe('ContextWindowBar', () => {
     expect(fill).toHaveStyle({ width: '100%' })
   })
 
-  it('pct 负值 → clamp 到 0；ok 文案显 0% 不外泄负数', () => {
-    setCU({ ...base, pct: -5 })
+  it('pct 负值 → clamp 到 0；标题显 (0%) 不外泄负数', () => {
+    setCU({ ...base, pct: -5, used_tokens: 0 })
     render(<ContextWindowBar />)
     const bar = screen.getByRole('progressbar')
     const fill = bar.querySelector('[data-fill]')
     expect(fill).toHaveStyle({ width: '0%' })
     expect(bar).toHaveAttribute('aria-valuenow', '0')
-    expect(screen.getByText('0%')).toBeInTheDocument()
+    // 标题数字以括号 (0%) 形式出现
+    expect(screen.getByText(/\(0%\)/)).toBeInTheDocument()
   })
 
-  it('pct=150 → danger 红 + 文案"剩余 0% 直到自动压缩"', () => {
-    setCU({ ...base, pct: 150 })
-    render(<ContextWindowBar />)
-    const fill = screen.getByRole('progressbar').querySelector('[data-fill]')
-    expect(fill?.className).toContain('bg-context-danger')
-    expect(screen.getByText(/剩余 0% 直到自动压缩/)).toBeInTheDocument()
-  })
-
-  it('pct 小数 95.1 → 剩余文案整数化（无浮点垃圾 4.900…）', () => {
+  it('pct 小数 95.1 → 标题整数化 (95%) 不带浮点垃圾', () => {
     setCU({ ...base, pct: 95.1 })
     render(<ContextWindowBar />)
-    expect(screen.getByText('剩余 5% 直到自动压缩')).toBeInTheDocument()
+    expect(screen.getByText(/\(95%\)/)).toBeInTheDocument()
+  })
+
+  it('formatTokens：< 1000 显原数 / < 1M 显 k / ≥ 1M 显 M', () => {
+    // n < 1000：显示整数
+    setCU({ ...base, pct: 0.01, used_tokens: 195, window_tokens: 1_000_000 })
+    const r1 = render(<ContextWindowBar />)
+    expect(screen.getByText('195 / 1.0M (0%)')).toBeInTheDocument()
+    r1.unmount()
+    // n < 1M：1 位小数 + k
+    setCU({ ...base, pct: 32, used_tokens: 320_345, window_tokens: 1_000_000 })
+    const r2 = render(<ContextWindowBar />)
+    expect(screen.getByText('320.3k / 1.0M (32%)')).toBeInTheDocument()
+    r2.unmount()
+    // n ≥ 1M：1 位小数 + M
+    setCU({ ...base, pct: 95, used_tokens: 1_500_000, window_tokens: 2_000_000 })
+    const r3 = render(<ContextWindowBar />)
+    expect(screen.getByText('1.5M / 2.0M (95%)')).toBeInTheDocument()
   })
 })
