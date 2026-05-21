@@ -20,7 +20,10 @@ export function Sidebar() {
   const theme = useThemeStore(s => s.theme)
   const toggleTheme = useThemeStore(s => s.toggleTheme)
   const navigate = useNavigate()
-  const { projectId } = useParams<{ projectId: string }>()
+  // 拿 projectId + sessionId：URL 有 projectId 但无 sessionId = 在「新对话」EmptyState
+  // 此时「新对话」按钮 active；进入某个 session 后 active 转移到对应 SessionItem
+  const { projectId, sessionId } = useParams<{ projectId: string; sessionId?: string }>()
+  const isNewChatActive = !!projectId && !sessionId
 
   // sessions 拉取 / 排序 / 过滤都交给 SessionHistoryGrouped
 
@@ -70,12 +73,17 @@ export function Sidebar() {
           type="button"
           onClick={goNewChat}
           disabled={!projectId}
-          className="
+          // active 态视觉与 SessionItem 选中对齐：bg-foreground/10 加深背景 + font-medium
+          // 不加 border-l（"新对话" 是 action 按钮非 list item，左色条视觉不自然）
+          className={`
             w-full flex items-center gap-2.5 px-3 py-2 rounded-lg
-            text-sm text-sidebar-foreground
-            hover:bg-muted transition-colors
+            text-sm text-sidebar-foreground transition-colors
             disabled:opacity-50 disabled:cursor-not-allowed
-          "
+            ${isNewChatActive
+              ? 'bg-foreground/10 font-medium'
+              : 'hover:bg-muted'
+            }
+          `}
         >
           <Edit className="h-4 w-4" />
           新对话

@@ -85,10 +85,13 @@ export function SessionItem({ session, project }: Props) {
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onClick()}
         className={`
           group flex items-center gap-1 px-3 py-2 rounded-lg cursor-pointer
-          text-sm transition-colors
+          text-sm transition-colors relative
           ${isActive
-            ? 'bg-muted text-sidebar-foreground font-medium'
-            : 'hover:bg-muted text-sidebar-foreground'
+            ? // 选中态：foreground/10 透明叠加（比 muted 深一档）+ 左侧 primary 色条 + 加粗
+              // light mode: 白底上呈浅深灰；dark mode: 深底上呈明显亮一档；
+              // border-l 用 primary 色（蓝紫）与 foreground 混色拉开层次，显著区分 hover
+              'bg-foreground/10 text-sidebar-foreground font-medium border-l-2 border-primary'
+            : 'hover:bg-muted text-sidebar-foreground border-l-2 border-transparent'
           }
         `}
       >
@@ -112,9 +115,19 @@ export function SessionItem({ session, project }: Props) {
             className="flex-1 bg-transparent border-b border-primary outline-none text-sm"
           />
         ) : (
-          <span className="flex-1 truncate" title={session.title}>
-            {session.title || '(无标题)'}
-          </span>
+          <>
+            {/* 无序列表 bullet：固定尺寸圆点，与 GroupTreeSelector ProjectRow 同款视觉
+                shrink-0 防 flex 压缩；active 时跟随高亮色，否则用 muted-foreground */}
+            <span
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                isActive ? 'bg-sidebar-foreground' : 'bg-muted-foreground'
+              }`}
+            />
+            <span className="flex-1 truncate" title={session.title}>
+              {session.title || '(无标题)'}
+            </span>
+          </>
         )}
 
         {/* 替换旧 Trash 按钮 + 二次确认为 SessionMenu（设计 §8.1） */}
