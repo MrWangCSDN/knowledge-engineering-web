@@ -46,7 +46,8 @@ export function ChatPage() {
   const startNew = useChatStore(s => s.startNew)
   const abort = useChatStore(s => s.abort)
   const currentSessionId = useChatStore(s => s.currentSessionId)
-  const currentProjectId = useChatStore(s => s.currentProjectId)
+  // 注：useEffect 内用 useChatStore.getState().currentProjectId 直接读最新值，不通过 selector closure；
+  //     因此不在此处订阅 — 删 declaration 避免 TS 报 unused（2026-05-21 修）
 
   // 归档状态：本地 state 存 archived_at，null = 活动 session
   const [archivedAt, setArchivedAt] = useState<string | null | undefined>(undefined)

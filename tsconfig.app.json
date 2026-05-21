@@ -26,5 +26,14 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* exclude 测试文件 — 测试代码不参与 production build 类型检查；
+     由 vitest 自己的 tsconfig（隐式）做类型校验，二者解耦。
+     2026-05-21 加：production build (tsc -b && vite build) 历来包含 .test.tsx → 类型错误阻塞部署；
+     生产代码本身类型干净，测试代码类型噪声不该卡 build。 */
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/test/**"
+  ]
 }

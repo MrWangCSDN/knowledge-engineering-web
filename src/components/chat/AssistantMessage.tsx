@@ -11,7 +11,7 @@ import { lazy, Suspense, useState } from 'react'
 import { Download } from 'lucide-react'
 // v1.8：react-markdown 把流式 raw_stream 文本实时渲染成 markdown
 // remark-gfm 加 GitHub-flavored markdown 支持（表格 / 删除线 / 任务列表）
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 import type { Message } from '@/types/chat'
@@ -30,9 +30,10 @@ import { useThemeStore } from '@/store/theme'
 // react-markdown v10 的 code 钩子 props: { className?, children, node, ... }
 // `inline` 字段已废弃，改用 className 是否含 `language-xxx` 来判断
 //
-// 类型用 Record<string, unknown> 兼容 react-markdown 的宽松 props（避免 deps 严格 typing）
-const MD_COMPONENTS = {
-  code: (props: Record<string, unknown>) => {
+// 2026-05-21：react-markdown v10+ 的 Components 类型严格了，原 Record<string, unknown> 不再兼容；
+// 用 `as Components` 类型断言绕过严格签名 — 运行时 props 形态与 v9 一致，运行无影响。
+const MD_COMPONENTS: Components = {
+  code: (props) => {
     const className = (props.className as string) || ''
     const children = props.children
     // 行内 `code` 没有 className，直接走 inline 样式
@@ -49,7 +50,7 @@ const MD_COMPONENTS = {
     return <CodeBlock language={language} value={codeText} />
   },
   // 让 ReactMarkdown 渲染 fenced code 时不再包外层 <pre>（CodeBlock 自带容器）
-  pre: (props: Record<string, unknown>) => <>{props.children as React.ReactNode}</>,
+  pre: (props) => <>{props.children as React.ReactNode}</>,
 }
 
 const SECTION_ICONS: Record<string, string> = {
