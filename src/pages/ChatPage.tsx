@@ -10,7 +10,7 @@
  * 设计文档：[[首页设计]] §3
  */
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
 
 import { useProjectStore } from '@/store/projects'
 import { useChatStore } from '@/store/chat'
@@ -26,7 +26,16 @@ export function ChatPage() {
 
   const projects = useProjectStore(s => s.projects)
   const isLoadingProjects = useProjectStore(s => s.isLoading)
+  const setCurrentProject = useProjectStore(s => s.setCurrentProject)
   const project = projects.find(p => p.id === projectId)
+
+  // URL 工程 id 有效时，同步到 store（驱动 localStorage 持久化）→
+  // 下次刷新 / 新 tab 打开默认进同一工程。
+  useEffect(() => {
+    if (project) {
+      setCurrentProject(project.id)
+    }
+  }, [project, setCurrentProject])
 
   const messages = useChatStore(s => s.messages)
   const streamingMessage = useChatStore(s => s.streamingMessage)
@@ -108,21 +117,20 @@ export function ChatPage() {
     )
   }
   if (!project) {
+    // URL 工程 id 无效（权限被撤 / 工程被删 / localStorage 过期）：
+    // 有可访问工程 → 自动跳到 store 当前选择（fetchProjects 已兜底为有效项）
+    // 没有可访问工程 → 提示无工程（admin 可去 CLI 创建）
+    if (projects.length > 0) {
+      // store.currentProjectId 由 fetchProjects 校验过是有效项；fallback 到首项
+      const fallbackId = useProjectStore.getState().currentProjectId ?? projects[0].id
+      return <Navigate to={`/project/${fallbackId}`} replace />
+    }
     return (
       <div className="max-w-md mx-auto py-12 px-4 text-center">
-        <h2 className="text-xl font-medium mb-2">找不到工程</h2>
+        <h2 className="text-xl font-medium mb-2">没有可访问的工程</h2>
         <p className="text-muted-foreground text-sm mb-4">
-          工程 ID <code className="bg-muted px-1 rounded text-xs">{projectId}</code> 不存在或已被删除。
+          你目前没有任何工程的访问权限，请联系管理员。
         </p>
-        {projects.length > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate(`/project/${projects[0].id}`)}
-            className="text-sm underline hover:no-underline"
-          >
-            切换到 {projects[0].name}
-          </button>
-        )}
       </div>
     )
   }

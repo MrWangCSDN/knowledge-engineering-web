@@ -8,17 +8,19 @@
  *  - 维护"当前选中工程"（顶栏选择器、URL 同步）
  *  - 提供 fetchProjects / setCurrentProject 等 actions
  *
- * 跟 auth store 的区别：不持久化（每次刷新都重新拉，保证拿到最新 indexing 进度）。
+ * 持久化策略：**仅** currentProjectId 写 localStorage（用户偏好），
+ * projects 列表每次刷新重新拉（保证拿到最新 indexing 进度 + 权限变更）。
  *
  * 设计文档：[[首页设计]] §6.6
  */
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { listProjects } from '@/api/projects'
 import type { Project } from '@/types/project'
 
 interface ProjectStore {
   projects: Project[]
-  /** 当前选中的工程 id；由 URL 驱动，但 store 也维护一份方便其他组件读。 */
+  /** 当前选中的工程 id；由 URL 驱动 + 持久化到 localStorage。 */
   currentProjectId: string | null
   isLoading: boolean
   error: string | null
@@ -32,36 +34,52 @@ interface ProjectStore {
   reset: () => void
 }
 
-export const useProjectStore = create<ProjectStore>((set, get) => ({
-  projects: [],
-  currentProjectId: null,
-  isLoading: false,
-  error: null,
+export const useProjectStore = create<ProjectStore>()(
+  persist(
+    (set, get) => ({
+      projects: [],
+      currentProjectId: null,
+      isLoading: false,
+      error: null,
 
-  fetchProjects: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      const projects = await listProjects()
-      set({ projects, isLoading: false })
+      fetchProjects: async () => {
+        set({ isLoading: true, error: null })
+        try {
+          const projects = await listProjects()
+          set({ projects, isLoading: false })
 
-      // 兜底：如果当前还没选工程而列表非空，自动选第一个 ready 状态的
-      // （只用 ready 是为避免 default 选到 indexing/failed 卡住用户）
-      if (!get().currentProjectId) {
-        const firstReady = projects.find(p => p.status === 'ready')
-        const fallback = firstReady ?? projects[0]
-        if (fallback) set({ currentProjectId: fallback.id })
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '加载工程失败'
-      set({ error: msg, isLoading: false })
-    }
-  },
+          // 兜底：currentProjectId 缺失 / 已不在新列表（权限被撤 / 工程被删
+          // / localStorage 持久化的 id 已过期）→ 选首个 ready，否则任一非空。
+          // 只用 ready 是为避免 default 选到 indexing/failed 卡住用户。
+          const current = get().currentProjectId
+          const stillValid = current !== null && projects.some(p => p.id === current)
+          if (!stillValid) {
+            const firstReady = projects.find(p => p.status === 'ready')
+            const fallback = firstReady ?? projects[0]
+            set({ currentProjectId: fallback?.id ?? null })
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : '加载工程失败'
+          set({ error: msg, isLoading: false })
+        }
+      },
 
-  setCurrentProject: (id: string | null) => {
-    set({ currentProjectId: id })
-  },
+      setCurrentProject: (id: string | null) => {
+        set({ currentProjectId: id })
+      },
 
-  reset: () => {
-    set({ projects: [], currentProjectId: null, isLoading: false, error: null })
-  },
-}))
+      reset: () => {
+        // 注意：保留 currentProjectId persist（同一用户重新登录会回到上次工程）
+        // 如要彻底清除偏好，调用方需另调 localStorage.removeItem
+        set({ projects: [], isLoading: false, error: null })
+      },
+    }),
+    {
+      name: 'ke-project-store',
+      storage: createJSONStorage(() => localStorage),
+      // 只持久化 currentProjectId — projects 列表每次刷新重拉，
+      // 否则会带回过期 projects（含已无权限的）覆盖真实 server 数据
+      partialize: (state) => ({ currentProjectId: state.currentProjectId }),
+    },
+  ),
+)
