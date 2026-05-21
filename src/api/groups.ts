@@ -21,10 +21,14 @@ import type { AuditLogResponse } from '@/types/audit'
 
 // ─── Group CRUD ───────────────────────────────────────────────────────────────
 
-/** 列出当前用户可见的所有用户组（按权限过滤）。 */
+/** 列出当前用户可见的所有用户组（按权限过滤）。
+ *
+ * 后端返回 raw array（FastAPI `response_model=list[GroupResponse]`），
+ * 不是 `{ groups: [...] }` 包装；这里直接拿 data。
+ */
 export async function listVisibleGroups(): Promise<Group[]> {
-  const { data } = await apiClient.get<{ groups: Group[] }>('/groups')
-  return data.groups
+  const { data } = await apiClient.get<Group[]>('/groups')
+  return data
 }
 
 /** 创建新用户组（需要 admin 或 group-create 权限）。 */

@@ -20,8 +20,8 @@
 // useState：声明组件内的响应式状态，改变它会触发重新渲染
 import { useEffect, useRef, useState } from 'react'
 
-// useNavigate：react-router-dom 提供的 hook，返回一个函数，调用后可以编程式跳转路由
-import { useNavigate } from 'react-router-dom'
+// 注：登出走 window.location.href hard redirect（更稳，整页刷新清干净），
+//     故移除 useNavigate import。如未来要做软跳转其他页（如点头像 → /settings），可恢复
 
 // 从 lucide-react 引入三个 SVG 图标组件：向下箭头、登出图标、用户图标
 // User 别名为 UserIcon，避免与项目里的 User 类型同名冲突
@@ -36,10 +36,20 @@ import { logout as apiLogout } from '@/api/auth'
 // useAuthStore：Zustand 全局状态 hook，存储 access_token 和登录用户信息
 import { useAuthStore } from '@/store/auth'
 
+// 登出时需要清空的"用户隔离"业务 store —— 不清会让下一个登录用户看到上一个用户的残留数据
+//   - useSessionStore: 左栏会话列表（按 project_id 分桶）
+//   - useChatStore: 当前对话消息流 + currentSessionId / currentProjectId
+//   - useProjectStore: 工程列表（不同用户的权限不同）
+//   - useArchivedSessions: 归档对话列表
+import { useSessionStore } from '@/store/sessions'
+import { useChatStore } from '@/store/chat'
+import { useProjectStore } from '@/store/projects'
+import { useArchivedSessionStore } from '@/store/archivedSessions'
+
 // export function：具名导出，调用方用 import { UserMenu } from '...' 引入
 export function UserMenu() {
-  // useNavigate 返回的 navigate 函数用于在代码里跳转页面（不依赖 <Link> 组件）
-  const navigate = useNavigate()
+  // 注意：登出改用 window.location.href hard redirect（见 onLogout 注释），不再需要 useNavigate。
+  // 这里保留 import 占位 — 其他点击交互（如点头像跳 /settings）暂未实现但未来可能用
 
   // 从 store 读取当前登录用户对象；selector (s => s.user) 保证只订阅 user 字段变化
   // user 类型是 User | null；未登录或登出后值为 null
@@ -107,12 +117,23 @@ export function UserMenu() {
     }
     // 清空 Zustand store：accessToken / user 全部置 null
     clear()
+    // 同步清空所有"用户隔离"业务 store —— 否则下一个登录用户会看到上一个用户的残留数据
+    //   bug 复现：alice 登 → sidebar 拉到 alice 的 sessions → alice 登出（只清 auth）→ bob 登
+    //   → useSessionStore.sessionsByProject 还是 alice 的 → bob 看到 alice 的对话标题
+    //   → 点进去 URL 是 alice 的 session_id → 后端校验 user_id 失败 → 404
+    useSessionStore.getState().reset()
+    useChatStore.getState().reset()
+    useProjectStore.getState().reset()
+    useArchivedSessionStore.getState().reset()
     // 关闭 dropdown（防止导航完成前 dropdown 短暂可见）
     setOpen(false)
-    // navigate('/login', { replace: true })：
-    //   replace: true 表示用新路由替换当前历史记录（而非追加），
-    //   这样用户按浏览器"回退"不会回到需要登录的页面
-    navigate('/login', { replace: true })
+    // window.location.href = '/login'（hard redirect）替代 navigate('/login')：
+    //   2026-05-21 修：实测发现 navigate('/login') 偶发不生效（store reset 同步
+    //   + ChatPage <Navigate to="/project/..."> 抢救式重定向 race），用户点了登出
+    //   仍停在 /project/proj-b 看到"没有可访问的工程" banner。
+    //   hard redirect 触发整页刷新 → 所有 React state / Zustand store 内存清零 →
+    //   /login 页 fresh mount，不再受 race 影响（与 client.ts 401 拦截器同模式）
+    window.location.href = '/login'
   }
 
   return (

@@ -55,6 +55,11 @@ import { login as apiLogin, fetchMe } from '@/api/auth'
 
 // Zustand store hook；用 selector 写法只订阅需要的字段，减少不必要的 re-render
 import { useAuthStore } from '@/store/auth'
+// 用户隔离 store：登录前先 reset，防止"同一 tab 切账号"残留（alice 关 tab 不登出 → bob 同 tab 登 → 看到 alice sidebar）
+import { useSessionStore } from '@/store/sessions'
+import { useChatStore } from '@/store/chat'
+import { useProjectStore } from '@/store/projects'
+import { useArchivedSessionStore } from '@/store/archivedSessions'
 
 // LoginPhase：union 类型，是这个状态机的所有合法状态
 // import type：TypeScript 专有语法，告诉编译器这是纯类型导入，编译后完全消失
@@ -189,6 +194,13 @@ export function LoginForm() {
         password,
         remember_me: rememberMe,
       })
+
+      // 登录成功前先清空所有"用户隔离"业务 store —— 防止同 tab 切账号时上一个用户的残留数据被新用户看到
+      // 双层防护：UserMenu.onLogout 已经清一次；这里再清是 belt-and-suspenders（用户可能关 tab 不登出）
+      useSessionStore.getState().reset()
+      useChatStore.getState().reset()
+      useProjectStore.getState().reset()
+      useArchivedSessionStore.getState().reset()
 
       // 把 access_token 存入 Zustand store（内存中，不持久化）
       // setAccessToken 同时计算过期时间戳：Date.now() + expires_in * 1000
