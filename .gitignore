@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code worktree metadata（per-developer, 不应入版本控制）
+.claude/

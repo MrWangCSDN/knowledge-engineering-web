@@ -21,6 +21,8 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
 import { ArrowUp, Plus, Square, Mic } from 'lucide-react'
 
+import { ModelSwitcher } from './ModelSwitcher'
+
 interface Props {
   onSend: (text: string) => void
   loading?: boolean
@@ -164,10 +166,15 @@ export function ChatInput({
         </div>
       </div>
 
-      {/* 底部提示：超小字号 + 极淡灰 */}
-      <p className="text-center text-[11px] text-muted-foreground/50 mt-2">
-        Enter 发送 · Shift+Enter 换行
-      </p>
+      {/* 底部 footer：左 Enter 提示 + 右 ModelSwitcher（Claude Code 风布局） */}
+      <div className="flex items-center justify-between mt-2 px-1">
+        {/* 左侧 hint：占位用 flex-1 让 ModelSwitcher 推到最右 */}
+        <p className="flex-1 text-center text-[11px] text-muted-foreground/50">
+          Enter 发送 · Shift+Enter 换行
+        </p>
+        {/* 右侧模型切换器（绝对定位避免影响 hint 居中体感）*/}
+        <ModelSwitcher />
+      </div>
     </div>
   )
 }

@@ -135,6 +135,24 @@ export async function fetchMe(): Promise<User> {
 }
 
 /**
+ * 更新当前用户的偏好 LLM 模型（PATCH /auth/me/model）。
+ *
+ * 后端会用 llm_factory.is_supported_model 做白名单校验；未知 model_id 返 400。
+ * 返回更新后的 User 对象（含新 preferred_model + updated_at）。
+ *
+ * @param modelId 模型 id（如 'qwen-plus' / 'MiniMax-M2'）
+ * @returns 更新后的 User
+ *
+ * 关于 PATCH 语义：
+ *   PATCH 表示"部分更新资源"（只改某些字段），区别于 PUT（整体替换）。
+ *   语义上 PATCH 比 POST 更精确：明确告诉后端只在更新某字段。
+ */
+export async function updatePreferredModel(modelId: string): Promise<User> {
+  const { data } = await apiClient.patch<User>('/auth/me/model', { model_id: modelId })
+  return data
+}
+
+/**
  * 登出 —— 后端清 refresh_token cookie
  *
  * 工作流程：

@@ -48,7 +48,32 @@ export interface User {
   // 例如 "2026-05-04T12:34:56" 或 "2026-05-04T12:34:56Z"（含时区）
   // 前端显示时通常需转换：new Date("2026-05-04T12:34:56").toLocaleString()
   created_at: string
+
+  // 用户偏好的 LLM 模型 id（如 'qwen-plus' / 'MiniMax-M2'）。
+  // null = 未设置 → 前端用 DEFAULT_MODEL_ID 兜底（与后端 llm_factory.SUPPORTED_MODELS 同步）
+  // 由 PATCH /auth/me/model 更新；登录后 GET /auth/me 拉取
+  preferred_model: string | null
 }
+
+// ─── LLM 模型 catalog（与后端 src/service/qa_engine/llm_factory.SUPPORTED_MODELS 同步）
+// 新增 vendor / model 时两边同步改；后端是 source of truth，前端是 UI 镜像
+export interface ModelOption {
+  /** 模型 id，与后端 API 通信用 */
+  id: string
+  /** UI 显示名（如 'Qwen-Plus'） */
+  label: string
+  /** Vendor 副标签（如 'DashScope' / 'MiniMax'） */
+  vendor: string
+}
+
+/** 支持的模型列表（顺序即 UI 默认排序；[0] 是 fallback 默认） */
+export const SUPPORTED_MODELS: ModelOption[] = [
+  { id: 'qwen-plus', label: 'Qwen-Plus', vendor: 'DashScope' },
+  { id: 'MiniMax-M2', label: 'MiniMax-M2', vendor: 'MiniMax' },
+]
+
+/** 默认模型 id（用户未设 preferred_model 时用此） */
+export const DEFAULT_MODEL_ID = SUPPORTED_MODELS[0].id
 
 /**
  * LoginRequest —— 登录请求的请求体
