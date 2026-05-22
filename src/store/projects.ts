@@ -22,6 +22,10 @@ interface ProjectStore {
   projects: Project[]
   /** 当前选中的工程 id；由 URL 驱动 + 持久化到 localStorage。 */
   currentProjectId: string | null
+  /** 每个工程最后一次访问的 session id。
+   *  用于登录 / RootRedirect 时恢复用户上次的会话（与 ChatGPT 一致）。
+   *  ChatPage 已有 404 兜底，session 删除时自动 fallback 到 /project/{id}。 */
+  lastSessionByProject: Record<string, string>
   isLoading: boolean
   error: string | null
 
@@ -30,6 +34,8 @@ interface ProjectStore {
   fetchProjects: () => Promise<void>
   /** 设置当前工程；通常由 URL 变化驱动（useEffect 监听 useParams）。 */
   setCurrentProject: (id: string | null) => void
+  /** 记住该工程下用户最后访问的 session（chat store loadSession / sendMessage meta 时调）。 */
+  setLastSession: (projectId: string, sessionId: string) => void
   /** 清空 store（登出时调）。 */
   reset: () => void
 }
@@ -39,6 +45,7 @@ export const useProjectStore = create<ProjectStore>()(
     (set, get) => ({
       projects: [],
       currentProjectId: null,
+      lastSessionByProject: {},
       isLoading: false,
       error: null,
 
@@ -68,18 +75,28 @@ export const useProjectStore = create<ProjectStore>()(
         set({ currentProjectId: id })
       },
 
+      setLastSession: (projectId: string, sessionId: string) => {
+        // 把"该 project 下最后访问的 session"写入 map（持久化到 localStorage）
+        // 登录 / 刷新页面后 RootRedirect 用此值跳到上次的 session（ChatGPT 同款体验）
+        set(s => ({
+          lastSessionByProject: { ...s.lastSessionByProject, [projectId]: sessionId },
+        }))
+      },
+
       reset: () => {
-        // 注意：保留 currentProjectId persist（同一用户重新登录会回到上次工程）
-        // 如要彻底清除偏好，调用方需另调 localStorage.removeItem
+        // 注意：保留 currentProjectId + lastSessionByProject persist（同一用户重新登录会回到上次会话）
+        // 切换用户时由 UserMenu.onLogout 显式调 reset 清掉
         set({ projects: [], isLoading: false, error: null })
       },
     }),
     {
       name: 'ke-project-store',
       storage: createJSONStorage(() => localStorage),
-      // 只持久化 currentProjectId — projects 列表每次刷新重拉，
-      // 否则会带回过期 projects（含已无权限的）覆盖真实 server 数据
-      partialize: (state) => ({ currentProjectId: state.currentProjectId }),
+      // 持久化 currentProjectId + lastSessionByProject —— projects 列表每次刷新重拉
+      partialize: (state) => ({
+        currentProjectId: state.currentProjectId,
+        lastSessionByProject: state.lastSessionByProject,
+      }),
     },
   ),
 )

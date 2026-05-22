@@ -165,13 +165,14 @@ export function ChatInput({
             type="button"
             onClick={loading ? onAbort : submit}
             disabled={disabled || (!loading && !hasText)}
-            aria-label={loading ? '停止' : '发送'}
+            aria-label={loading ? '停止生成' : '发送'}
+            title={loading ? '停止生成（中断流式输出）' : '发送（Enter）'}
             className={`
               h-8 w-8 rounded-full
               flex items-center justify-center
               transition-all
               ${loading
-                ? 'bg-foreground text-background hover:bg-foreground/90'
+                ? 'bg-foreground text-background hover:bg-foreground/90 ring-2 ring-foreground/30 animate-pulse'
                 : hasText
                   ? 'bg-foreground text-background hover:bg-foreground/90 scale-100'
                   : 'bg-muted text-muted-foreground/50 scale-95 cursor-not-allowed'
@@ -179,7 +180,7 @@ export function ChatInput({
             `}
           >
             {loading
-              ? <Square className="h-3 w-3 fill-current" />
+              ? <Square className="h-3.5 w-3.5 fill-current" />
               : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
           </button>
         </div>

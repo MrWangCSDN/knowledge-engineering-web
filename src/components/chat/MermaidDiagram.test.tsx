@@ -16,6 +16,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('mermaid', () => ({
   default: {
     initialize: vi.fn(),
+    // parse 2026-05-22 加：v11+ 用它先验语法（suppressErrors 时返 boolean 不抛）
+    parse: vi.fn().mockResolvedValue(true),
     // render 返回 { svg: '<svg ...>...</svg>' }
     render: vi.fn().mockResolvedValue({ svg: '<svg data-test="mermaid-output">ok</svg>' }),
   },

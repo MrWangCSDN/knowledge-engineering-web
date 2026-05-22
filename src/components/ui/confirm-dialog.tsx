@@ -79,7 +79,11 @@ export function ConfirmDialog({
         </button>
         <button
           type="button"
-          onClick={onConfirm}
+          onClick={(e) => {
+            // stopPropagation 防 click 冒泡到外层 Modal 遮罩 onClose（兼容 portal 边界）
+            e.stopPropagation()
+            onConfirm()
+          }}
           className={`
             px-4 py-2 text-sm rounded-md font-medium
             transition-colors

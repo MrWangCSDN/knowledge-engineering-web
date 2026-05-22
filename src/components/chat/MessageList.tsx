@@ -21,9 +21,18 @@ export function MessageList({ messages, streaming, projectId }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // 新消息或流式 token 来时自动滚动到底
+  // 2026-05-22 修：
+  // 1. deps 补 raw_stream.length（chit-chat 流式累计在 raw_stream 而非 sections）
+  // 2. behavior: 'smooth' → 'instant' —— 流式 token 高频时前一次 smooth 动画没走完
+  //    下一次又触发，叠加 CodeBlock 异步 highlight 的 layout shift 视觉抖动严重。
+  //    instant 立刻 snap 到底部，无动画过渡，跟随更稳。
+  const streamingContentLen =
+    (streaming?.raw_stream?.length ?? 0) +
+    (streaming?.sections?.reduce((acc, s) => acc + (s.content?.length ?? 0), 0) ?? 0)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, streaming?.sections?.length, streaming?.sections?.at(-1)?.content])
+    // 'instant' Chrome 102+ 支持；'auto' 是 W3C 默认（无动画），作为 fallback
+    bottomRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior })
+  }, [messages.length, streamingContentLen])
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 w-full">

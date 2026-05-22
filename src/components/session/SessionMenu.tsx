@@ -77,8 +77,12 @@ export function SessionMenu({ onArchive, onDelete, onRename }: Props) {
           <span>归档</span>
         </DropdownMenuItem>
         <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault()
+          onSelect={() => {
+            // 2026-05-22 修：不 preventDefault — 让 Radix Dropdown 正常关闭。
+            // bug: 之前 e.preventDefault() 让 dropdown 保留 open 状态，
+            //      用户点 ConfirmDialog 的"删除"按钮时，Radix 把 click 当成
+            //      "outside-click 关菜单" 吞掉 → 用户感觉要点两次才删除。
+            // focus 跳走的副作用已由 onCloseAutoFocus={e.preventDefault()}（line 52）防住。
             onDelete()
           }}
           className="cursor-pointer text-destructive focus:text-destructive"

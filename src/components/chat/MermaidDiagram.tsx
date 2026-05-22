@@ -59,14 +59,25 @@ export function MermaidDiagram({ code, theme = 'light' }: Props) {
     let cancelled = false
     ;(async () => {
       try {
+        // 2026-05-22 修：Mermaid v11+ 解析失败时不再 throw，而是渲染"炸弹图"错误 SVG
+        // 导致我们的 catch 拦不住，前端显示 "Syntax error in text" 黑色炸弹。
+        // 修：用 mermaid.parse(suppressErrors:true) 先验语法，false 才走 fallback。
+        const valid = await mermaid.parse(code, { suppressErrors: true })
+        if (valid === false) {
+          if (!cancelled && mountedRef.current) {
+            console.debug('MermaidDiagram syntax invalid, fallback to <pre>')
+            setSvg(null)
+            setErrored(true)
+          }
+          return
+        }
         const result = await mermaid.render(safeId, code)
         if (!cancelled && mountedRef.current) {
           setSvg(result.svg)
           setErrored(false)
         }
       } catch (e) {
-        // 解析失败 / 语法错误：降级为 <pre>，把错误 swallow
-        // 不打 console.error 防止生产 sentry 误报；用 console.debug 更轻
+        // 兜底：旧版本 throw 路径仍兼容
         if (!cancelled && mountedRef.current) {
           console.debug('MermaidDiagram render failed:', e)
           setSvg(null)

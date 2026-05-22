@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/auth'
 export function RootRedirect() {
   const projects = useProjectStore(s => s.projects)
   const currentProjectId = useProjectStore(s => s.currentProjectId)
+  const lastSessionByProject = useProjectStore(s => s.lastSessionByProject)
   const isLoading = useProjectStore(s => s.isLoading)
   const user = useAuthStore(s => s.user)
 
@@ -50,5 +51,11 @@ export function RootRedirect() {
 
   // 优先用 store 的 currentProjectId，回退到第一个
   const targetId = currentProjectId ?? projects[0].id
+  // 2026-05-22：恢复上次 session（ChatGPT 同款体验）— 若该工程有 lastSession 记录就直接跳进去
+  // session 已被删 / user_id 不匹配 → ChatPage.loadSession 拿 404 自动 fallback 到 /project/{id}
+  const lastSid = lastSessionByProject[targetId]
+  if (lastSid) {
+    return <Navigate to={`/project/${targetId}/chat/${lastSid}`} replace />
+  }
   return <Navigate to={`/project/${targetId}`} replace />
 }
