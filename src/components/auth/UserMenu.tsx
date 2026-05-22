@@ -36,15 +36,13 @@ import { logout as apiLogout } from '@/api/auth'
 // useAuthStore：Zustand 全局状态 hook，存储 access_token 和登录用户信息
 import { useAuthStore } from '@/store/auth'
 
-// 登出时需要清空的"用户隔离"业务 store —— 不清会让下一个登录用户看到上一个用户的残留数据
-//   - useSessionStore: 左栏会话列表（按 project_id 分桶）
-//   - useChatStore: 当前对话消息流 + currentSessionId / currentProjectId
-//   - useProjectStore: 工程列表（不同用户的权限不同）
-//   - useArchivedSessions: 归档对话列表
-import { useSessionStore } from '@/store/sessions'
-import { useChatStore } from '@/store/chat'
-import { useProjectStore } from '@/store/projects'
-import { useArchivedSessionStore } from '@/store/archivedSessions'
+// 2026-05-22：移除 useSessionStore / useChatStore / useProjectStore / useArchivedSessionStore
+//   原本登出时显式 reset 这四个 store —— 副作用就是 React 在 window.location.replace
+//   尚未真正发起 navigation 前先 re-render 一遍，projects=[] → ChatPage 走 if (!project &&
+//   projects.length===0) → 渲染"没有可访问的工程"banner → 然后才跳 /login，造成肉眼可见闪屏。
+//   现在：仅走 hard redirect，浏览器整页刷新自动清空所有 in-memory zustand store；
+//   LoginForm.onSubmit 入口（line 199-203）已经再清一次（belt-and-suspenders）覆盖
+//   "用户在同一 tab 不登出直接切账号"的极端场景。
 
 // export function：具名导出，调用方用 import { UserMenu } from '...' 引入
 export function UserMenu() {
@@ -55,8 +53,9 @@ export function UserMenu() {
   // user 类型是 User | null；未登录或登出后值为 null
   const user = useAuthStore((s) => s.user)
 
-  // clear：Zustand action，把 accessToken / user 全部重置为 null（清空登录态）
-  const clear = useAuthStore((s) => s.clear)
+  // 注：原本 const clear = useAuthStore(s => s.clear) 已删 —— 登出直接走 hard redirect，
+  // 整页刷新会把 auth store 一并清干净，无需手动 clear()（且 clear() 会触发 re-render，
+  // 与新打开"没有可访问的工程"闪屏 bug 同因）。
 
   // open：boolean 状态，控制 dropdown 是否展开
   // useState(false) 表示初始值为 false（关闭状态）
@@ -104,36 +103,33 @@ export function UserMenu() {
   //   这会在以下情况发生：用户未登录、登出后 store 被 clear、页面刚加载还没拿到 user
   if (!user) return null
 
-  // onLogout：async 函数，处理登出流程
-  // async 关键字让函数内部可以使用 await（等待 Promise 完成）
+  // onLogout：登出处理
+  //
+  // 顺序极其重要（2026-05-22 修复"先闪没有工程再到 /login"bug）：
+  //   ① setOpen(false)        — 关掉 dropdown（视觉先收起）
+  //   ② await apiLogout()      — 后端清 HttpOnly refresh_token cookie（JS 无法直接删）
+  //   ③ window.location.replace('/login')
+  //                            — 整页硬跳转；replace 不留 history（按"后退"不会回登出前页）
+  //
+  // 关键："不要"在 ③ 前对任何 Zustand store 调 reset / clear。
+  //
+  // 旧实现的 bug：clear() + 4 个 store.reset() 触发 React 重新订阅 → ChatPage 看到
+  //   projects=[] → 走 if (!project && projects.length===0) 分支 → 渲染"没有可访问的工程"
+  //   banner → 浏览器之后才真正去拉 /login → 用户肉眼看到 1 帧（甚至更久）的闪屏。
+  //
+  // 现在做法：把"清状态"完全交给 hard redirect — 浏览器卸载本页 → JS heap 清零 →
+  //   下个 /login 页面 fresh mount，所有 in-memory zustand store 自然回到初始值。
+  //   LoginForm.onSubmit（line 199-203）还会再清一次 session/chat/project/archived，
+  //   兜底"用户没点登出直接关 tab 又开 tab 登别的账号"的极端情况。
   async function onLogout() {
+    setOpen(false)
     try {
-      // await：等待 apiLogout() 返回的 Promise 完成
-      // 调用后端接口清除 refresh_token cookie（HttpOnly cookie，JS 无法直接删除，必须靠后端）
       await apiLogout()
     } catch {
-      // 捕获并静默忽略网络错误：即使后端接口失败，也要让用户能登出
-      // 原因：本地 store 和 token 才是前端鉴权的关键，后端 cookie 失效不影响前端"登出"体验
+      // 后端 cookie 清除失败（网络异常等）— 静默忽略，硬刷新仍能把前端登出
     }
-    // 清空 Zustand store：accessToken / user 全部置 null
-    clear()
-    // 同步清空所有"用户隔离"业务 store —— 否则下一个登录用户会看到上一个用户的残留数据
-    //   bug 复现：alice 登 → sidebar 拉到 alice 的 sessions → alice 登出（只清 auth）→ bob 登
-    //   → useSessionStore.sessionsByProject 还是 alice 的 → bob 看到 alice 的对话标题
-    //   → 点进去 URL 是 alice 的 session_id → 后端校验 user_id 失败 → 404
-    useSessionStore.getState().reset()
-    useChatStore.getState().reset()
-    useProjectStore.getState().reset()
-    useArchivedSessionStore.getState().reset()
-    // 关闭 dropdown（防止导航完成前 dropdown 短暂可见）
-    setOpen(false)
-    // window.location.href = '/login'（hard redirect）替代 navigate('/login')：
-    //   2026-05-21 修：实测发现 navigate('/login') 偶发不生效（store reset 同步
-    //   + ChatPage <Navigate to="/project/..."> 抢救式重定向 race），用户点了登出
-    //   仍停在 /project/proj-b 看到"没有可访问的工程" banner。
-    //   hard redirect 触发整页刷新 → 所有 React state / Zustand store 内存清零 →
-    //   /login 页 fresh mount，不再受 race 影响（与 client.ts 401 拦截器同模式）
-    window.location.href = '/login'
+    // ⚠️ replace 不是 href —— 不在 history 留 /project/{id}，避免按"后退"回到登出前
+    window.location.replace('/login')
   }
 
   return (
