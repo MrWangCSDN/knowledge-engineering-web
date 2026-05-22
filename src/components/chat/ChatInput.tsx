@@ -59,11 +59,30 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`
   }, [value])
 
+  // 自动聚焦：组件挂载 + loading 从 true→false（LLM 答完）后立刻 refocus
+  //   场景：用户发完问题等 KE 答 → 流结束 → 光标自动回到输入框，可直接继续打字
+  //   disabled 模式（归档 session）下不抢焦点（textarea 已被禁用，focus 无意义）
+  //   ChatGPT 同款"输入框光标常驻"体验
+  useEffect(() => {
+    if (disabled) return
+    if (loading) return
+    // 用 requestAnimationFrame 等本轮 React render 结束 + DOM commit 后再 focus
+    // 否则若 loading→idle 与 disabled 状态变化在同一 batch，focus 调用可能被覆盖
+    const id = requestAnimationFrame(() => {
+      ref.current?.focus()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [loading, disabled])
+
   const submit = () => {
     const text = value.trim()
     if (!text || loading) return
     onSend(text)
     setValue('')
+    // 发送后立即 refocus（用户可在 LLM 流式期间继续打下一句）
+    // 注：此时 loading 即将变 true 触发上面 useEffect，但 disabled=true 时 textarea
+    // 还是 enabled（disabled 由 loading 决定的 line 116），refocus 仍生效
+    ref.current?.focus()
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
