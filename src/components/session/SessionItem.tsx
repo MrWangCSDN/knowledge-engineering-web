@@ -84,12 +84,12 @@ export function SessionItem({ session, project }: Props) {
         onClick={onClick}
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onClick()}
         className={`
-          group flex items-center gap-1 px-3 py-2 rounded-lg cursor-pointer
-          text-sm transition-colors relative
+          group flex items-center gap-1 px-3 py-1.5 rounded-lg cursor-pointer
+          text-xs transition-colors relative
           ${isActive
-            ? // 选中态：foreground/10 透明叠加（比 muted 深一档）+ 左侧 primary 色条 + 加粗
-              // light mode: 白底上呈浅深灰；dark mode: 深底上呈明显亮一档；
-              // border-l 用 primary 色（蓝紫）与 foreground 混色拉开层次，显著区分 hover
+            ? // 选中态：foreground/10 透明叠加 + 左侧 primary 色条 + 加粗
+              // 字体规格（v4，2026-05-21 调层级感）：session 最小（text-xs=12px）
+              // py-1.5 比工程 row 同高；缩进由父 ul.pl-3 提供
               'bg-foreground/10 text-sidebar-foreground font-medium border-l-2 border-primary'
             : 'hover:bg-muted text-sidebar-foreground border-l-2 border-transparent'
           }

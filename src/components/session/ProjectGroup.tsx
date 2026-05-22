@@ -25,16 +25,19 @@ export function ProjectGroup({ project, sessions }: Props) {
   const toggleProject = useSidebarStore(s => s.toggleProject)
 
   return (
-    <div className="text-sm">
-      {/* 工程名行（点击 toggle，不切工程） */}
+    <div>
+      {/* 工程名行（点击 toggle，不切工程）
+          字体规格（v4，2026-05-21）：层级中位
+            - text-[13px] 比"最近"(text-sm=14px)小一档
+            - font-medium 弱于"最近"的 font-semibold
+            - px-4 缩进比"最近"(px-2)深一级（视觉层级感）*/}
       <button
         type="button"
         onClick={() => toggleProject(project.id)}
         aria-expanded={isExpanded}
-        // 字体规格（v3，2026-05-15）：用 sidebar-foreground 跟随 sidebar 主题
         className="
-          w-full flex items-center gap-1 px-3 py-1.5
-          text-sm font-medium text-sidebar-foreground
+          w-full flex items-center gap-1 px-4 py-1.5
+          text-[13px] font-medium text-sidebar-foreground
           hover:bg-muted rounded transition-colors
         "
       >
@@ -52,9 +55,9 @@ export function ProjectGroup({ project, sessions }: Props) {
         <span className="truncate">{project.name}</span>
       </button>
 
-      {/* 展开时渲染 sessions 列表 */}
+      {/* 展开时渲染 sessions 列表 — ul pl-3 让 session 整体再缩进一级（最深） */}
       {isExpanded && (
-        <ul className="space-y-0.5">
+        <ul className="space-y-0.5 pl-3">
           {sessions.map(s => (
             <SessionItem key={s.id} session={s} project={project} />
           ))}

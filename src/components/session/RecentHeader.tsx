@@ -18,14 +18,14 @@ export function RecentHeader() {
       type="button"
       onClick={toggleRecent}
       aria-expanded={recentExpanded}
-      // 字体规格（v3，2026-05-15）：对齐 ChatGPT 分组标签风格
-      //   - text-xs (12px) + font-semibold：小号但有分量
-      //   - text-sidebar-muted-foreground：灰色（不是 foreground）→ 分组属性
-      //   - uppercase / 中文不变形，但 letter-spacing(tracking) 仍能加可读性
+      // 字体规格（v4，2026-05-21 调层级感）：「最近」最大字号（顶层）
+      //   - text-sm (14px) + font-semibold：分组主标签
+      //   - text-sidebar-foreground：用主前景色（不是 muted），强化层级头地位
+      //   - px-2 缩进最浅（最近 < 工程 < session 递增缩进）
       className="
-        w-full flex items-center gap-1 px-3 pt-4 pb-1
-        text-xs font-semibold text-sidebar-muted-foreground tracking-wider
-        hover:text-sidebar-foreground rounded transition-colors
+        w-full flex items-center gap-1 px-2 pt-4 pb-1
+        text-sm font-semibold text-sidebar-foreground tracking-wide
+        hover:bg-muted rounded transition-colors
       "
     >
       {/* chevron：展开 → ↓ ; 折叠 → → */}
