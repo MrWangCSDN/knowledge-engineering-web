@@ -38,7 +38,18 @@ export function ChatPage() {
   }, [project, setCurrentProject])
 
   const messages = useChatStore(s => s.messages)
-  const streamingMessage = useChatStore(s => s.streamingMessage)
+  // streamingMessage 防护：只在 session_id 匹配当前 URL sessionId 时才渲染
+  // 2026-05-21 — 用户切走再切回的中间窗口里，fetch 仍在 background 跑可能
+  // 把 streamingMessage 设回去（含旧 session 的内容）；防止旧 session 流式数据
+  // 短暂污染新 session 的主区 UI（即使 1 帧也避免）。
+  const streamingMessage = useChatStore(s => {
+    const sm = s.streamingMessage
+    if (!sm) return null
+    // currentSessionId 由 SSE meta event 设置；sessionId 由 URL 给
+    // 二者匹配才认这条 streaming 属于当前展示的 session
+    if (sm.session_id && sm.session_id !== sessionId) return null
+    return sm
+  })
   const status = useChatStore(s => s.status)
   const error = useChatStore(s => s.error)
   const sendMessage = useChatStore(s => s.sendMessage)

@@ -178,14 +178,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ status: 'submitting', error: null })
     try {
       const detail = await getSessionDetail(projectId, sessionId)
-      // 切到已有会话：从 messages 累计算 context window 用量
-      // （Claude Code 风：进度条始终反映"当前会话累计 tokens"，不区分新/旧 session）
+
+      // 2026-05-21 — Step 1 流式持续：判断是否切回正在流式的同一 session
+      //   场景：sess_A 流式中 → 用户切 sess_B → 切回 sess_A
+      //   原行为：streamingMessage 在第一次切走时被清 null → 切回时 fs 还没写完 → 主区空白
+      //   新行为：切回原流式 session 时，保留 streamingMessage + status=streaming
+      //          (fetch 在 background 持续 update streamingMessage，UI 立刻看到累积进度)
+      const live = get()
+      const currentStreaming = live.streamingMessage
+      const isResumingOwnStream =
+        currentStreaming != null && currentStreaming.session_id === sessionId
+
       set({
         currentSessionId: sessionId,
         currentProjectId: projectId,
         messages: detail.messages,
-        streamingMessage: null,
-        status: 'idle',
+        // 切回原流式 session 时保留；其他情况清掉（防其他 session 的流式残留污染 UI）
+        streamingMessage: isResumingOwnStream ? currentStreaming : null,
+        status: isResumingOwnStream ? 'streaming' : 'idle',
         contextUsage: computeUsageFromMessages(detail.messages),
       })
     } catch (err) {

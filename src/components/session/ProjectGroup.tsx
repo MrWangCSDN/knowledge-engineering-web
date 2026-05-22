@@ -27,16 +27,16 @@ export function ProjectGroup({ project, sessions }: Props) {
   return (
     <div>
       {/* 工程名行（点击 toggle，不切工程）
-          字体规格（v4，2026-05-21）：层级中位
+          字体规格（v5，2026-05-21 加深层级感）：
             - text-[13px] 比"最近"(text-sm=14px)小一档
             - font-medium 弱于"最近"的 font-semibold
-            - px-4 缩进比"最近"(px-2)深一级（视觉层级感）*/}
+            - pl-5 比"最近"(pl-2)深 12px（视觉缩进明显） */}
       <button
         type="button"
         onClick={() => toggleProject(project.id)}
         aria-expanded={isExpanded}
         className="
-          w-full flex items-center gap-1 px-4 py-1.5
+          w-full flex items-center gap-1 pl-5 pr-3 py-1.5
           text-[13px] font-medium text-sidebar-foreground
           hover:bg-muted rounded transition-colors
         "
@@ -55,9 +55,10 @@ export function ProjectGroup({ project, sessions }: Props) {
         <span className="truncate">{project.name}</span>
       </button>
 
-      {/* 展开时渲染 sessions 列表 — ul pl-3 让 session 整体再缩进一级（最深） */}
+      {/* 展开时渲染 sessions 列表 — ul pl-6 让 session 比工程再右缩进 12px
+          （工程 pl-5，加 pl-6 → session 行起点 ≈ pl-11 视觉，三层递进明显） */}
       {isExpanded && (
-        <ul className="space-y-0.5 pl-3">
+        <ul className="space-y-0.5 pl-6">
           {sessions.map(s => (
             <SessionItem key={s.id} session={s} project={project} />
           ))}

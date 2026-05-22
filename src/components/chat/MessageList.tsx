@@ -27,11 +27,18 @@ export function MessageList({ messages, streaming, projectId }: Props) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 w-full">
-      {messages.map(m =>
-        m.role === 'user'
-          ? <UserMessage key={m.id} message={m} />
-          : <AssistantMessage key={m.id} message={m} projectId={projectId} />,
-      )}
+      {messages.map((m, idx) => {
+        // 2026-05-21 关键修：后端 S6 改造后 message id=null（fs 文件名即 msg_id 但未透传到响应）；
+        // 多条 m.id=null 会让 React `key={m.id}` 冲突 → 行为 undefined，常见现象就是
+        // 主区"明明有 messages 但只渲染少数 / 完全不显示"。
+        // 兜底：id 缺失时用 `${role}-${created_at}-${idx}` 拼 stable key（同一轮 render
+        // 内 idx + created_at 保证唯一；跨 render 也稳定 — 因为 messages 数组顺序由
+        // 后端 created_at + role tie-break 升序保证）。
+        const key = m.id ?? `${m.role}-${m.created_at ?? ''}-${idx}`
+        return m.role === 'user'
+          ? <UserMessage key={key} message={m} />
+          : <AssistantMessage key={key} message={m} projectId={projectId} />
+      })}
       {streaming && <AssistantMessage message={streaming} streaming projectId={projectId} />}
       <div ref={bottomRef} />
     </div>
