@@ -19,6 +19,14 @@ import { EmptyState } from '@/components/chat/EmptyState'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
 import { ContextWindowBar } from '@/components/chat/ContextWindowBar'
+import type { Message } from '@/types/chat'
+
+/**
+ * 模块级稳定空数组 —— selector 用同一引用避免每次 re-render。
+ * 类型固化为 Message[]（非 readonly）— MessageList props 是 Message[]，二者对齐避免假阳性类型噪声。
+ * 我们靠"never mutate"约定保持只读语义（实际不会被改：messagesBySession 整体替换写入）。
+ */
+const EMPTY_MSGS: Message[] = []
 
 export function ChatPage() {
   const { projectId, sessionId } = useParams<{ projectId: string, sessionId?: string }>()
@@ -37,19 +45,24 @@ export function ChatPage() {
     }
   }, [project, setCurrentProject])
 
-  const messages = useChatStore(s => s.messages)
-  // streamingMessage 防护：只在 session_id 匹配当前 URL sessionId 时才渲染
-  // 2026-05-21 — 用户切走再切回的中间窗口里，fetch 仍在 background 跑可能
-  // 把 streamingMessage 设回去（含旧 session 的内容）；防止旧 session 流式数据
-  // 短暂污染新 session 的主区 UI（即使 1 帧也避免）。
-  const streamingMessage = useChatStore(s => {
-    const sm = s.streamingMessage
-    if (!sm) return null
-    // currentSessionId 由 SSE meta event 设置；sessionId 由 URL 给
-    // 二者匹配才认这条 streaming 属于当前展示的 session
-    if (sm.session_id && sm.session_id !== sessionId) return null
-    return sm
-  })
+  // ────────────────────────────────────────────────────────────────────────
+  // 2026-05-22 大重构：chat store 改为按 sessionId 索引（byId map）的多 session
+  // 模型 — 这里通过 URL sessionId 直接派生当前 session 的 view。
+  //
+  // 关键好处（来自 ChatGPT / Claude.ai 参考）：
+  //   - 切走 session（URL 变） → 旧 session 的 streamingBySession[oldSid] 不动
+  //   - SSE fetch 仍后台跑，token 持续写到 streamingBySession[oldSid]
+  //   - 切回 URL=/chat/oldSid → selector 立即读到 streamingBySession[oldSid] → UI 恢复流式
+  //   - status 单全局字段，故按 URL sid 是否有 streaming 派生 isStreaming
+  // ────────────────────────────────────────────────────────────────────────
+  const messages = useChatStore(s =>
+    sessionId ? s.messagesBySession[sessionId] ?? EMPTY_MSGS : EMPTY_MSGS
+  )
+  // 当前 URL sessionId 对应的 streamingMessage（按 sid 索引，天然只属于当前 session）
+  // 旧实现需要"session_id 匹配防护"；新实现 byId map 直接是 key 隔离，不需要二次防护
+  const streamingMessage = useChatStore(s =>
+    sessionId ? s.streamingBySession[sessionId] ?? null : null
+  )
   const status = useChatStore(s => s.status)
   const error = useChatStore(s => s.error)
   const sendMessage = useChatStore(s => s.sendMessage)

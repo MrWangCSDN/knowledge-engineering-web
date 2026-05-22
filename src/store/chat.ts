@@ -1,17 +1,23 @@
 /**
  * src/store/chat.ts
  *
- * 对话状态 store —— 管理当前会话的消息列表 + 流式中状态。
+ * 对话状态 store —— 管理多 session 并发的流式状态。
+ *
+ * 2026-05-22 大重构（参考 ChatGPT / Claude.ai 设计）：
+ *   旧设计：streamingMessage / messages 全局单实例 → 切走 session 后状态丢失
+ *   新设计：按 sessionId 索引（streamingBySession / messagesBySession / abortBySession）
+ *     - 多个 session 可以同时流式
+ *     - 切走再切回看到流式继续 ✓
+ *     - 后台 done 自动写到对应 session 的 messagesBySession[sid]
+ *     - UI 通过 selector 根据 URL sessionId 派生当前 session view
  *
  * 数据流：
  *   sendMessage(projectId, question)
- *     ├─ 立即加一条 user 消息 (临时 id, 状态 idle→submitting)
- *     ├─ fetch /qa/explain (POST + SSE)
- *     │   ├─ event: meta → 创建 streamingMessage(空)、记录真实 message_id/session_id
- *     │   ├─ event: section_start → streamingMessage.sections 加新段
- *     │   ├─ event: content → 累加 delta 到当前段
- *     │   ├─ event: section_done → 该段加 references
- *     │   └─ event: done → finalize: streamingMessage 转入 messages，状态回 idle
+ *     ├─ user msg push 到 messagesBySession[currentSid]
+ *     ├─ fetch /qa/explain (POST + SSE，AbortController 存入 abortBySession[currentSid])
+ *     │   ├─ event: meta → 创建 streamingBySession[metaSid] + 更新 currentSessionId
+ *     │   ├─ event: token/content/section_* → 更新 streamingBySession[metaSid]（不依赖 currentSid）
+ *     │   └─ event: done → finalize: 推到 messagesBySession[metaSid]，删 streamingBySession[metaSid]
  *     └─ error → 状态 error
  *
  * 设计文档：[[首页设计]] §3.3 (状态机) + §6.4 (SSE)
@@ -23,6 +29,7 @@ import { apiClient } from '@/api/client'
 import { getSessionDetail, voteMessage as apiVoteMessage } from '@/api/sessions'
 import { useSessionStore } from '@/store/sessions'
 import { useAuthStore } from '@/store/auth'
+import { useProjectStore } from '@/store/projects'
 import type {
   ChatStatus,
   Message,
@@ -45,48 +52,36 @@ function tryParseJSON(s: string): unknown {
   try { return JSON.parse(s) } catch { return s }
 }
 
+/**
+ * 模块级稳定空数组 — selector 派生时避免每次返新引用触发 re-render。
+ * 用 Message[]（非 readonly）— 与 MessageList props 对齐；约定不可变（永不 mutate）。
+ */
+const EMPTY_MESSAGES: Message[] = []
+
 /** 默认模型上下文窗口（与后端 KE_MODEL_CONTEXT_WINDOW 一致：1M tokens）。 */
 const _DEFAULT_CTX_WINDOW = 1_000_000
 
-/** 单条消息估算 tokens（与后端 estimate_tokens 公式对齐：1 token ≈ 1.5 字符）。
- *
- * Claude Code 风格的"会话累计 token 显示"基础。assistant 真实内容在 sections 里，
- * 不能只看 m.content（参 chat.ts:188 注释）。
- */
 function estimateMessageTokens(m: Pick<Message, 'content' | 'sections' | 'role'>): number {
   let text = m.content || ''
-  // assistant：真实内容在 sections，content 通常空
   if ((!text || text.trim() === '') && m.sections && m.sections.length > 0) {
     text = m.sections.map(s => (s.title ? s.title + s.content : s.content)).join('')
   }
-  // Math.ceil 保守偏大（同后端 context_budget.estimate_tokens）
   return Math.ceil(text.length / 1.5)
 }
 
-/** 由 messages 数组累计算会话整体 token 用量（Claude Code 风：累计而非本轮）。
- *
- * 替代后端 SSE meta 的"本轮注入量"语义 — 后端的本轮量只能反映 prompt 压力，
- * 但用户期望看到"整个会话至今用了多少 tokens"。每轮 done 后重算即可。
- */
-function computeUsageFromMessages(messages: Message[]): ContextUsage {
+function computeUsageFromMessages(messages: readonly Message[]): ContextUsage {
   const used = messages.reduce((acc, m) => acc + estimateMessageTokens(m), 0)
   const window = _DEFAULT_CTX_WINDOW
-  // Math.min clamp 防超 100%（极端长会话）；pct 1 位小数与后端一致
   const pct = window > 0 ? Math.min(100, (used / window) * 100) : 0
   return {
     used_tokens: used,
     window_tokens: window,
     pct: Math.round(pct * 10) / 10,
-    history_trimmed: false,  // 累计语义下 trim 信息由 SSE meta 单独保留（见 done 事件）
+    history_trimmed: false,
   }
 }
 
-/** 累积流式答案的工具：根据 section type 找/建段、累 delta、补 references。 */
-function applyContentDelta(
-  sections: Section[],
-  type: SectionType,
-  delta: string,
-): Section[] {
+function applyContentDelta(sections: Section[], type: SectionType, delta: string): Section[] {
   const idx = sections.findIndex(s => s.type === type)
   if (idx === -1) return sections
   const next = sections.slice()
@@ -99,11 +94,7 @@ function startSection(sections: Section[], type: SectionType, title: string): Se
   return [...sections, { type, title, content: '', references: [] }]
 }
 
-function finishSection(
-  sections: Section[],
-  type: SectionType,
-  references: Reference[] | undefined,
-): Section[] {
+function finishSection(sections: Section[], type: SectionType, references: Reference[] | undefined): Section[] {
   const idx = sections.findIndex(s => s.type === type)
   if (idx === -1) return sections
   const next = sections.slice()
@@ -115,38 +106,40 @@ function finishSection(
 // ─── store 接口 ──────────────────────────────────────────────────────────
 
 interface ChatStore {
-  /** 当前会话 id（URL → path param 同步进来）。null 表示新对话。 */
+  /** 当前 UI 焦点的 session id（由 URL sessionId 同步过来）。null = 新对话 EmptyState。 */
   currentSessionId: string | null
-  /** 当前工程 id（防止跨工程消息混进来）。 */
+  /** 当前工程 id。 */
   currentProjectId: string | null
-  messages: Message[]
-  /** 流式中的临时 assistant 消息（done 后转入 messages）。 */
-  streamingMessage: Message | null
+
+  // ─── 按 sessionId 索引的真实源（多 session 并发） ────────────────────
+  /** 每个 session 的已完成消息列表（按 sid 隔离，切走再切回不丢） */
+  messagesBySession: Record<string, Message[]>
+  /** 每个 session 正在流式中的 assistant 临时消息（仅含进行中；done 后移到 messagesBySession） */
+  streamingBySession: Record<string, Message>
+  /** 每个 session 的 fetch AbortController（用户点 ⏹ 停止时按 sid abort） */
+  abortBySession: Record<string, AbortController>
+
+  // ─── 与当前 session 强相关的全局 UI 状态 ─────────────────────────────
   status: ChatStatus
   error: string | null
-  /** 中止控制器（用户点 ⏸ 停止时调）。 */
-  _abortCtrl: AbortController | null
-  /** 上下文窗口用量（每轮 meta 刷新；新会话/切会话/重置归 null）。设计 §5.2 */
+  /** 当前 session 的上下文用量（每轮 done 重算）。 */
   contextUsage: ContextUsage | null
 
   // ─── actions ───
-  /** 切换激活会话（URL 变化时调）。会触发后端拉取消息历史。 */
   loadSession: (projectId: string, sessionId: string) => Promise<void>
-  /** 开始一个新对话（清空消息）。 */
   startNew: (projectId: string) => void
-  /** 发送一条消息 → POST /qa/explain → 接 SSE 流。 */
   sendMessage: (projectId: string, question: string) => Promise<void>
-  /** 取消正在进行中的流。 */
-  abort: () => void
-  /** 投票 / 取消投票一条 assistant 消息。 */
-  voteMessage: (
-    projectId: string,
-    sessionId: string,
-    messageId: string,
-    vote: 'up' | 'down',
-  ) => Promise<void>
-  /** 完全清空（登出/切工程时）。 */
+  /** 停止当前 session 的流式（默认 currentSessionId；可传具体 sid 停别的）。 */
+  abort: (sessionId?: string) => void
+  voteMessage: (projectId: string, sessionId: string, messageId: string, vote: 'up' | 'down') => Promise<void>
+  /** 完全清空（登出 / 切工程时）。 */
   reset: () => void
+
+  // ─── selectors（外部调用方便：直接拿当前 session view） ────────────
+  /** 当前 sessionId 对应的 messages（无 sid → 空数组）。模块级常量 EMPTY_MESSAGES 保稳定 ref。 */
+  getCurrentMessages: () => Message[]
+  /** 当前 sessionId 对应的 streamingMessage（无 sid / 该 sid 无流 → null）。 */
+  getCurrentStreaming: () => Message | null
 }
 
 
@@ -155,19 +148,31 @@ interface ChatStore {
 export const useChatStore = create<ChatStore>((set, get) => ({
   currentSessionId: null,
   currentProjectId: null,
-  messages: [],
-  streamingMessage: null,
+  messagesBySession: {},
+  streamingBySession: {},
+  abortBySession: {},
   status: 'idle',
   error: null,
-  _abortCtrl: null,
   contextUsage: null,
 
+  getCurrentMessages: () => {
+    const sid = get().currentSessionId
+    if (!sid) return EMPTY_MESSAGES
+    return get().messagesBySession[sid] ?? EMPTY_MESSAGES
+  },
+
+  getCurrentStreaming: () => {
+    const sid = get().currentSessionId
+    if (!sid) return null
+    return get().streamingBySession[sid] ?? null
+  },
+
   startNew: (projectId: string) => {
+    // 新对话：clear currentSessionId（URL 变 /project/{pid} 无 sid）
+    // 不动 messagesBySession / streamingBySession —— 其他 session 的状态保留
     set({
       currentSessionId: null,
       currentProjectId: projectId,
-      messages: [],
-      streamingMessage: null,
       status: 'idle',
       error: null,
       contextUsage: null,
@@ -179,36 +184,30 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const detail = await getSessionDetail(projectId, sessionId)
 
-      // 2026-05-21 — Step 1 流式持续：判断是否切回正在流式的同一 session
-      //   场景：sess_A 流式中 → 用户切 sess_B → 切回 sess_A
-      //   原行为：streamingMessage 在第一次切走时被清 null → 切回时 fs 还没写完 → 主区空白
-      //   新行为：切回原流式 session 时，保留 streamingMessage + status=streaming
-      //          (fetch 在 background 持续 update streamingMessage，UI 立刻看到累积进度)
-      const live = get()
-      const currentStreaming = live.streamingMessage
-      const isResumingOwnStream =
-        currentStreaming != null && currentStreaming.session_id === sessionId
-
-      set({
-        currentSessionId: sessionId,
-        currentProjectId: projectId,
-        messages: detail.messages,
-        // 切回原流式 session 时保留；其他情况清掉（防其他 session 的流式残留污染 UI）
-        streamingMessage: isResumingOwnStream ? currentStreaming : null,
-        status: isResumingOwnStream ? 'streaming' : 'idle',
-        contextUsage: computeUsageFromMessages(detail.messages),
+      // 关键：按 sessionId 索引存进 byId map（messagesBySession[sid] = detail.messages）
+      // streamingBySession[sid] 如果该 session 正流式（background fetch 仍在跑）会自动 reuse
+      // → ChatPage selector 看到 streaming 仍在，UI 立即恢复流式 widget
+      set(s => {
+        const existingStreaming = s.streamingBySession[sessionId]
+        return {
+          currentSessionId: sessionId,
+          currentProjectId: projectId,
+          messagesBySession: { ...s.messagesBySession, [sessionId]: detail.messages },
+          // streamingBySession 不动 —— 各 session 自己的 streaming 仍累积
+          status: existingStreaming ? 'streaming' : 'idle',
+          contextUsage: computeUsageFromMessages(detail.messages),
+        }
       })
+      // 记忆"该 project 最后访问的 session"
+      useProjectStore.getState().setLastSession(projectId, sessionId)
     } catch (err) {
-      // 404 = sessionId 失效（用户切账号后 URL 残留 / session 已被删 / 跨用户访问被拒）
-      // 不要把 404 错误 banner 抛给用户，回退到 startNew 状态即可，由 ChatPage 监听
-      // currentSessionId=null 触发 URL 重定向到 /project/{projectId}（清掉残留尾巴）
       const axErr = err as { response?: { status?: number } }
       if (axErr?.response?.status === 404) {
+        // 404 = sessionId 失效 → 清 currentSessionId 让 ChatPage 兜底 fallback 到 /project/{pid}
+        // 不动 streamingBySession / messagesBySession —— 别的 session 不受影响
         set({
           currentSessionId: null,
           currentProjectId: projectId,
-          messages: [],
-          streamingMessage: null,
           status: 'idle',
           contextUsage: null,
           error: null,
@@ -219,52 +218,112 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  abort: () => {
-    get()._abortCtrl?.abort()
-    set({ status: 'idle', _abortCtrl: null, streamingMessage: null })
+  abort: (sessionId?: string) => {
+    // ChatGPT 同款"停止生成"行为：保留已生成部分推到 messages 列表
+    const targetSid = sessionId ?? get().currentSessionId
+    if (!targetSid) return
+
+    // abort fetch（用户点 ⏹ 停止时）
+    const ctrl = get().abortBySession[targetSid]
+    ctrl?.abort()
+
+    set(s => {
+      const sm = s.streamingBySession[targetSid]
+      // 准备清掉 streamingBySession[targetSid] + abortBySession[targetSid] 的工具函数
+      const { [targetSid]: _streamGone, ...remainingStreams } = s.streamingBySession
+      const { [targetSid]: _ctrlGone, ...remainingAborts } = s.abortBySession
+      const isCurrent = s.currentSessionId === targetSid
+
+      if (!sm) {
+        // 流刚起就停（无 streaming msg）— 仅清 controller
+        return {
+          abortBySession: remainingAborts,
+          status: isCurrent ? 'idle' : s.status,
+        }
+      }
+
+      // 收集已累积的内容
+      const rawText = (sm.raw_stream || '').trim()
+      const hasSections = sm.sections && sm.sections.some(sec => sec.content?.trim().length > 0)
+      const hasContent = !!(rawText || hasSections || (sm.content && sm.content.trim().length > 0))
+
+      if (!hasContent) {
+        // 流刚起就停（没任何 token）→ 直接清，不留空消息
+        return {
+          streamingBySession: remainingStreams,
+          abortBySession: remainingAborts,
+          status: isCurrent ? 'idle' : s.status,
+        }
+      }
+
+      // 构造 final message（与 case 'done' 同形态，但无 metadata）
+      const finalMsg: Message = { ...sm }
+      if (rawText && !hasSections) {
+        // chit-chat 主路径：raw_stream → chit-chat section（AssistantMessage 非 streaming 渲染走 sections）
+        finalMsg.sections = [{
+          type: 'chit-chat',
+          title: '',
+          content: rawText,
+          references: [],
+        }]
+      }
+      delete (finalMsg as { raw_stream?: string }).raw_stream
+
+      // 推到 messagesBySession[targetSid]（按 sid 索引，不污染其他 session）
+      const existing = s.messagesBySession[targetSid] ?? []
+      return {
+        messagesBySession: { ...s.messagesBySession, [targetSid]: [...existing, finalMsg] },
+        streamingBySession: remainingStreams,
+        abortBySession: remainingAborts,
+        status: isCurrent ? 'idle' : s.status,
+      }
+    })
   },
 
   sendMessage: async (projectId: string, question: string) => {
     const state = get()
     if (state.status === 'streaming' || state.status === 'submitting') return
 
-    // 1. 立即加一条 user 消息（用临时 id）
+    // ① currentSid 处理：新对话时为 null，后端 meta event 给真实 sid 后再补
+    //    用占位 sid 让 user msg 也能写到 byId map（meta 后会把占位 key 的 messages 迁移过去）
+    const initialSid = state.currentSessionId ?? tempId('sess')
+
+    // ② 立即加一条 user 消息（临时 id）
     const userMsg: Message = {
       id: tempId('msg'),
-      session_id: state.currentSessionId ?? tempId('sess'),
+      session_id: initialSid,
       role: 'user',
       content: question,
       created_at: new Date().toISOString(),
     }
-    set(s => ({
-      messages: [...s.messages, userMsg],
-      status: 'submitting',
-      error: null,
-      currentProjectId: projectId,
-    }))
+    set(s => {
+      const existing = s.messagesBySession[initialSid] ?? []
+      return {
+        messagesBySession: { ...s.messagesBySession, [initialSid]: [...existing, userMsg] },
+        status: 'submitting',
+        error: null,
+        currentProjectId: projectId,
+      }
+    })
 
-    // 2. 发起 SSE 流式请求
+    // ③ 发起 SSE 流式请求；ctrl 存到 abortBySession[initialSid]
+    //    meta event 后如果 sid 变了（新对话），把 ctrl 迁移到真实 sid
     const ctrl = new AbortController()
-    set({ _abortCtrl: ctrl })
+    set(s => ({ abortBySession: { ...s.abortBySession, [initialSid]: ctrl } }))
 
-    // 取最近 20 条历史发给后端（多轮对话）
-    // 历史 bug：曾经只取 slice(-10) → 多轮长对话早期信息丢失（5 种算法只答 2 种）
-    // 改 20 是临时缓和（仍依赖后端 §18 trim_history_to_budget 按 token 兜底）；
-    // 根治方案待 S6 后端直接从 fs 读 messages，前端不再传 history。
-    //
-    // 双重 bug：assistant 的真正回答在 m.sections（6 段式或单段 chit-chat），
-    // 而 m.content 通常是空字符串。原代码直接 m.content → LLM 看到的历史只剩
-    // user 提问 + assistant 空回复 → 上下文等同没记忆（"java 排序算法" 只答 2 种）。
-    // 修：assistant 优先取 sections 文本拼接；为空才 fallback 到 content。
-    const history = get().messages.slice(-20).map(m => {
+    // 取最近 20 条历史（assistant 优先取 sections）— 用 byId map 取当前 sid
+    const currentMsgs = get().messagesBySession[initialSid] ?? []
+    const history = currentMsgs.slice(-20).map(m => {
       let text = m.content || ''
       if ((!text || text.trim() === '') && m.sections && m.sections.length > 0) {
-        // 多段式（business 6 段）：用 markdown 风格拼回，保留语义边界；
-        // chit-chat 单段：title 为空，直接取 content
         text = m.sections.map(s => (s.title ? `## ${s.title}\n${s.content}` : s.content)).join('\n\n')
       }
       return { role: m.role, content: text }
     })
+
+    // metaSessionId 提升到 try/catch 外作用域 — catch 块需要访问以做错误归属（按 sid 清理）
+    // 初始等于 initialSid（占位或既有 sid），meta event 收到后改写为真实 sid
+    let metaSessionId: string = initialSid
 
     try {
       const baseUrl = (apiClient.defaults.baseURL || '/api').replace(/\/+$/, '')
@@ -279,11 +338,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         },
         body: JSON.stringify({
           question,
-          session_id: get().currentSessionId,
+          session_id: state.currentSessionId,
           history,
-          // 多模型支持（2026-05-21）：发当前用户的 preferred_model
-          // 后端校验 + 兜底：未知 model 自动回退默认（详见 llm_factory.get_llm_provider）
-          // 若 user 未设置 preferred_model（首次登录），传 null，后端走 DEFAULT_MODEL_ID
           model: useAuthStore.getState().user?.preferred_model ?? null,
         }),
         credentials: 'include',
@@ -296,13 +352,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
       if (!res.body) throw new Error('Empty response body')
 
-      // 3. 状态切换到 streaming
       set({ status: 'streaming' })
 
-      // 4. 解析 SSE 事件
+      // SSE 事件 — 用 metaSessionId（已在 try 外提升声明）作为 byId map key
+      // 这样切走 currentSessionId 后，token 仍写到正确的 streamingBySession[metaSid]，不丢
       let stopped = false
-      let metaSessionId = state.currentSessionId
       let metaMessageId: string | null = null
+      let migratedFromTemp = false  // 占位 sid → 真实 sid 迁移只做一次
+
+      // 内部 helper：根据 metaSessionId 更新 streamingBySession[sid]
+      // 同步当前 UI 也展示（如果 currentSessionId === metaSessionId）
+      const updateStream = (updater: (sm: Message) => Message) => {
+        set(s => {
+          const existing = s.streamingBySession[metaSessionId]
+          if (!existing) return s
+          const next = updater(existing)
+          return {
+            streamingBySession: { ...s.streamingBySession, [metaSessionId]: next },
+          }
+        })
+      }
 
       const parser = createParser({
         onEvent: (msg: EventSourceMessage) => {
@@ -311,10 +380,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           switch (msg.event) {
             case 'meta': {
-              metaSessionId = (data.session_id as string) ?? metaSessionId
+              const realSid = (data.session_id as string) ?? metaSessionId
               metaMessageId = (data.message_id as string) ?? null
-              // 上下文窗口用量（设计 §5.2/§6）：全字段形状校验，任一缺失/类型不符
-              // 一律存 null（绝不抛、绝不存结构残缺对象——否则进度条 NaN%/徽标失效）
+
+              // context_usage 校验
               const cu = data.context_usage
               const validCu =
                 cu != null && typeof cu === 'object' &&
@@ -322,113 +391,109 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 typeof (cu as { used_tokens?: unknown }).used_tokens === 'number' &&
                 typeof (cu as { window_tokens?: unknown }).window_tokens === 'number' &&
                 typeof (cu as { history_trimmed?: unknown }).history_trimmed === 'boolean'
-              // 创建空的 streamingMessage
-              set({
-                streamingMessage: {
+
+              set(s => {
+                // 占位 sid → 真实 sid 迁移（新对话首次拿到 server 给的 sid）
+                let nextMessagesBySession = s.messagesBySession
+                let nextAbortBySession = s.abortBySession
+                if (!migratedFromTemp && realSid !== initialSid && initialSid.startsWith('sess_tmp_')) {
+                  // 把 messagesBySession[initialSid]（user msg 暂存于此）迁移到 [realSid]
+                  const tempMsgs = s.messagesBySession[initialSid] ?? []
+                  const { [initialSid]: _gone, ...rest } = s.messagesBySession
+                  nextMessagesBySession = { ...rest, [realSid]: tempMsgs.map(m =>
+                    m.session_id === initialSid ? { ...m, session_id: realSid } : m
+                  ) }
+                  // ctrl 也迁移到 realSid
+                  const { [initialSid]: ctrlGone, ...restAborts } = s.abortBySession
+                  if (ctrlGone) nextAbortBySession = { ...restAborts, [realSid]: ctrlGone }
+                  migratedFromTemp = true
+                }
+
+                // 创建空的 streamingMessage 放到 byId map
+                const newStreaming: Message = {
                   id: metaMessageId ?? tempId('msg'),
-                  session_id: metaSessionId ?? '',
+                  session_id: realSid,
                   role: 'assistant',
                   content: '',
                   sections: [],
-                  tool_calls: {},  // v1.3 ReAct：累积 tool 调用
+                  tool_calls: {},
                   created_at: new Date().toISOString(),
-                },
-                currentSessionId: metaSessionId,
-                contextUsage: validCu ? (cu as ContextUsage) : null,
+                }
+
+                // 仅当用户没切走时才同步 currentSessionId / contextUsage：
+                //   - currentSessionId === initialSid（含 null / tempId / 已 load 的 sid）→ 用户仍在本会话
+                //   - 否则用户已 loadSession(其他 sid)，本 meta 不应抢走 UI
+                // 这样：用户在新对话发送 → 切走 → meta 拿到 realSid → 不抢 URL；
+                // 后台 SSE 仍写 streamingBySession[realSid]；切回时 selector 自然恢复流式。
+                const isStillOnThisSession =
+                  s.currentSessionId === initialSid ||
+                  (initialSid.startsWith('sess_tmp_') && s.currentSessionId === null)
+
+                return {
+                  messagesBySession: nextMessagesBySession,
+                  abortBySession: nextAbortBySession,
+                  streamingBySession: { ...s.streamingBySession, [realSid]: newStreaming },
+                  currentSessionId: isStillOnThisSession ? realSid : s.currentSessionId,
+                  contextUsage: isStillOnThisSession && validCu ? (cu as ContextUsage) : s.contextUsage,
+                }
               })
+
+              metaSessionId = realSid
+
+              // 记忆 lastSession
+              if (projectId) {
+                useProjectStore.getState().setLastSession(projectId, realSid)
+              }
               break
             }
+
             case 'tool_call': {
-              // v1.3 ReAct 事件：LLM 调工具 starting / complete 各发一次
               const payload = data as unknown as ToolCallPayload
-              set(s => {
-                if (!s.streamingMessage) return s
-                const tcs = { ...(s.streamingMessage.tool_calls || {}) }
+              updateStream(sm => {
+                const tcs = { ...(sm.tool_calls || {}) }
                 const existing = tcs[payload.id] || { starting: payload }
-                // phase='starting' → 占位 / phase='complete' → 补上结果
                 if (payload.phase === 'starting') {
                   tcs[payload.id] = { ...existing, starting: payload }
                 } else {
                   tcs[payload.id] = { ...existing, complete: payload }
                 }
-                return {
-                  streamingMessage: {
-                    ...s.streamingMessage,
-                    tool_calls: tcs,
-                  },
-                }
+                return { ...sm, tool_calls: tcs }
               })
               break
             }
+
             case 'token': {
-              // v1.6：LLM 流式 token chunk
-              // 累计到 raw_stream；UI 用它显示打字机效果
-              // 一旦 section_start / content 开始流入，UI 会切回结构化展示
               const delta = (data.delta as string) ?? ''
               if (!delta) break
-              set(s => {
-                if (!s.streamingMessage) return s
-                return {
-                  streamingMessage: {
-                    ...s.streamingMessage,
-                    raw_stream: (s.streamingMessage.raw_stream || '') + delta,
-                  },
-                }
-              })
+              updateStream(sm => ({ ...sm, raw_stream: (sm.raw_stream || '') + delta }))
               break
             }
+
             case 'step':
-              // step 事件用作 UI 反馈（"正在检索..."），暂时只更新 thinking 文案；W6 渲染时会用
               break
+
             case 'section_start': {
               const type = data.section as SectionType
               const title = (data.title as string) ?? ''
-              set(s => {
-                if (!s.streamingMessage) return s
-                return {
-                  streamingMessage: {
-                    ...s.streamingMessage,
-                    sections: startSection(s.streamingMessage.sections ?? [], type, title),
-                  },
-                }
-              })
+              updateStream(sm => ({ ...sm, sections: startSection(sm.sections ?? [], type, title) }))
               break
             }
+
             case 'content': {
               const type = data.section as SectionType
               const delta = (data.delta as string) ?? ''
-              set(s => {
-                if (!s.streamingMessage) return s
-                return {
-                  streamingMessage: {
-                    ...s.streamingMessage,
-                    sections: applyContentDelta(s.streamingMessage.sections ?? [], type, delta),
-                  },
-                }
-              })
+              updateStream(sm => ({ ...sm, sections: applyContentDelta(sm.sections ?? [], type, delta) }))
               break
             }
+
             case 'section_done': {
               const type = data.section as SectionType
               const references = data.references as Reference[] | undefined
-              set(s => {
-                if (!s.streamingMessage) return s
-                return {
-                  streamingMessage: {
-                    ...s.streamingMessage,
-                    sections: finishSection(s.streamingMessage.sections ?? [], type, references),
-                  },
-                }
-              })
+              updateStream(sm => ({ ...sm, sections: finishSection(sm.sections ?? [], type, references) }))
               break
             }
+
             case 'done': {
-              // ⚠️ 不要在这里 set stopped=true（2026-05-16 修）：
-              // 后端在 done 之后还会（首轮异步总结时）发一个 session_title 事件。
-              // 若此处 stopped=true，下面的 `while (!stopped)` 循环立即退出、
-              // reader 停止读取 → session_title 永远收不到 → 侧栏标题不刷新。
-              // 循环的退出由 reader.read() 的 done=true（流自然结束）兜底，
-              // 后端总会在 done(+可选 session_title) 后关流，所以不会卡死。
               const metadata: MessageMetadata = {
                 entry_points: [],
                 cited_entities: [],
@@ -437,28 +502,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 latency_ms: (data.latency_ms as number) ?? 0,
               }
               set(s => {
-                if (!s.streamingMessage) return s
-                const finalMsg: Message = {
-                  ...s.streamingMessage,
-                  metadata,
-                }
-                const nextMessages = [...s.messages, finalMsg]
-                // Claude Code 风进度条：done 后重算累计 token（覆盖 meta 阶段的本轮注入量）。
-                // 保留 meta 阶段拿到的 history_trimmed 标志（若 SSE 已提示"自动压缩"则保留提示）。
-                const usage = computeUsageFromMessages(nextMessages)
-                if (s.contextUsage?.history_trimmed) {
+                const sm = s.streamingBySession[metaSessionId]
+                if (!sm) return s
+                const finalMsg: Message = { ...sm, metadata }
+                // 移除 raw_stream 字段（非 streaming 时不再用）
+                delete (finalMsg as { raw_stream?: string }).raw_stream
+
+                const existing = s.messagesBySession[metaSessionId] ?? []
+                const nextMessages = [...existing, finalMsg]
+
+                // 删 streamingBySession[metaSessionId] + abortBySession[metaSessionId]
+                const { [metaSessionId]: _streamGone, ...remainingStreams } = s.streamingBySession
+                const { [metaSessionId]: _ctrlGone, ...remainingAborts } = s.abortBySession
+
+                const isCurrent = s.currentSessionId === metaSessionId
+                const usage = isCurrent ? computeUsageFromMessages(nextMessages) : s.contextUsage
+                // 保留 history_trimmed 提示
+                if (isCurrent && usage && s.contextUsage?.history_trimmed) {
                   usage.history_trimmed = true
                 }
+
                 return {
-                  messages: nextMessages,
-                  streamingMessage: null,
-                  status: 'idle',
-                  _abortCtrl: null,
+                  messagesBySession: { ...s.messagesBySession, [metaSessionId]: nextMessages },
+                  streamingBySession: remainingStreams,
+                  abortBySession: remainingAborts,
+                  status: isCurrent ? 'idle' : s.status,
                   contextUsage: usage,
                 }
               })
 
-              // 把当前 session 加到左栏（如果是新会话）
+              // 新会话：把 session 加到 sidebar
               const currentProject = get().currentProjectId
               if (currentProject && metaSessionId && !state.currentSessionId) {
                 const newSession: Session = {
@@ -473,9 +546,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               }
               break
             }
+
             case 'session_title': {
-              // 后端首轮异步总结完成，推来新标题 → 实时刷新侧栏
-              // 设计：[[会话标题-重命名与智能总结-设计]] §4.2
               const sid = data.session_id as string
               const title = data.title as string
               if (sid && title) {
@@ -483,14 +555,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               }
               break
             }
+
             case 'error': {
               stopped = true
               const errMsg = (data.message as string) ?? '未知错误'
-              set({
-                status: 'error',
-                error: errMsg,
-                streamingMessage: null,
-                _abortCtrl: null,
+              set(s => {
+                const { [metaSessionId]: _streamGone, ...remainingStreams } = s.streamingBySession
+                const { [metaSessionId]: _ctrlGone, ...remainingAborts } = s.abortBySession
+                const isCurrent = s.currentSessionId === metaSessionId
+                return {
+                  status: isCurrent ? 'error' : s.status,
+                  error: isCurrent ? errMsg : s.error,
+                  streamingBySession: remainingStreams,
+                  abortBySession: remainingAborts,
+                }
               })
               break
             }
@@ -506,21 +584,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         parser.feed(decoder.decode(value, { stream: true }))
       }
 
-      // 兜底：流自然结束但没收到 done 事件
-      if (get().status === 'streaming') {
-        set({ status: 'idle', streamingMessage: null, _abortCtrl: null })
-      }
+      // 兜底：流自然结束但没收到 done
+      set(s => {
+        const stillStreaming = s.streamingBySession[metaSessionId]
+        if (!stillStreaming) return s
+        const { [metaSessionId]: _gone, ...remaining } = s.streamingBySession
+        const { [metaSessionId]: _ctrlGone, ...remainingAborts } = s.abortBySession
+        const isCurrent = s.currentSessionId === metaSessionId
+        return {
+          streamingBySession: remaining,
+          abortBySession: remainingAborts,
+          status: isCurrent ? 'idle' : s.status,
+        }
+      })
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
-        // 用户主动 abort
-        set({ status: 'idle', streamingMessage: null, _abortCtrl: null })
+        // 用户主动 abort — 已由 abort action 处理；这里仅同步状态
         return
       }
-      set({
-        status: 'error',
-        error: (err as Error).message,
-        streamingMessage: null,
-        _abortCtrl: null,
+      set(s => {
+        const isCurrent = s.currentSessionId === metaSessionId
+        const { [metaSessionId]: _streamGone, ...remainingStreams } = s.streamingBySession
+        const { [metaSessionId]: _ctrlGone, ...remainingAborts } = s.abortBySession
+        return {
+          status: isCurrent ? 'error' : s.status,
+          error: isCurrent ? (err as Error).message : s.error,
+          streamingBySession: remainingStreams,
+          abortBySession: remainingAborts,
+        }
       })
     }
   },
@@ -530,15 +621,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   reset: () => {
-    get()._abortCtrl?.abort()
+    // 切账号 / 登出时：abort 所有 in-flight + 清所有 byId map
+    const s = get()
+    Object.values(s.abortBySession).forEach(c => c.abort())
     set({
       currentSessionId: null,
       currentProjectId: null,
-      messages: [],
-      streamingMessage: null,
+      messagesBySession: {},
+      streamingBySession: {},
+      abortBySession: {},
       status: 'idle',
       error: null,
-      _abortCtrl: null,
       contextUsage: null,
     })
   },

@@ -7,11 +7,16 @@ import * as sessionsApi from '@/api/sessions'
 vi.mock('@/api/sessions')
 
 // 模拟 useChatStore：返回空消息列表，不触发真实 SSE
+// 2026-05-22 chat store 大重构后：messages/streamingMessage 被按 sessionId 索引
+// 的 byId map 取代（messagesBySession / streamingBySession / abortBySession）。
+// ChatPage 内部 selector 通过 URL sessionId 派生当前 view，所以 mock 也照这个形态来。
 const mockChatStore = {
-  messages: [],
-  streamingMessage: null,
+  messagesBySession: {} as Record<string, unknown[]>,
+  streamingBySession: {} as Record<string, unknown>,
+  abortBySession: {} as Record<string, unknown>,
   status: 'idle',
   error: null,
+  contextUsage: null,
   sendMessage: vi.fn(),
   loadSession: vi.fn(),
   startNew: vi.fn(),
@@ -32,6 +37,7 @@ vi.mock('@/store/chat', () => {
 })
 
 // 模拟 useProjectStore：返回一个工程让 project 找得到（含 stats 字段供 EmptyState 渲染）
+// setCurrentProject 必填 — ChatPage useEffect 会调用，缺则 TypeError "is not a function"
 const mockProjectStore = {
   projects: [{
     id: 'p1',
@@ -40,19 +46,27 @@ const mockProjectStore = {
     stats: { methods_count: 0, classes_count: 0, interpretation_progress: 0 },
   }],
   isLoading: false,
+  setCurrentProject: vi.fn(),
+  setLastSession: vi.fn(),
+  currentProjectId: 'p1',
 }
 
-vi.mock('@/store/projects', () => ({
-  useProjectStore: (selector: (s: typeof mockProjectStore) => unknown) =>
-    selector(mockProjectStore),
-}))
+vi.mock('@/store/projects', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stub: any = (selector: (s: typeof mockProjectStore) => unknown) =>
+    selector(mockProjectStore)
+  // ChatPage v1.5.2 fallback 用 useProjectStore.getState() 静态方法
+  stub.getState = () => mockProjectStore
+  return { useProjectStore: stub }
+})
 
 describe('ChatPage: archived session 只读模式', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // 重置 store 状态
-    mockChatStore.messages = []
-    mockChatStore.streamingMessage = null
+    // 重置 store 状态 — 走新 byId map 形态
+    mockChatStore.messagesBySession = {}
+    mockChatStore.streamingBySession = {}
+    mockChatStore.abortBySession = {}
     mockChatStore.status = 'idle'
     mockChatStore.error = null
     mockChatStore.currentSessionId = 'sess_arch'
