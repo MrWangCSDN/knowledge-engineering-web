@@ -26,4 +26,12 @@ describe('TodoList', () => {
     const { container } = render(<TodoList todos={undefined} />)
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('状态以文本形式可达读屏（不只靠颜色/图标，sr-only）', () => {
+    render(<TodoList todos={items} />)
+    // 每个状态有对应中文 sr-only 文本（WCAG：状态不能只靠颜色传达）
+    expect(screen.getByText('已完成')).toBeInTheDocument()
+    expect(screen.getByText('进行中')).toBeInTheDocument()
+    expect(screen.getByText('待处理')).toBeInTheDocument()
+  })
 })
