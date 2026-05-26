@@ -104,6 +104,12 @@
   --context-warn: oklch(0.75 0.15 85);
   --context-danger: oklch(0.577 0.245 27.325);
 
+  /* agent todo 状态色 + 引用 accent（light）。沿用 context-* 范式：dark 提亮一档防脏块 */
+  --status-pending: oklch(0.556 0 0);        /* 灰，同 muted-foreground */
+  --status-progress: oklch(0.75 0.15 85);    /* 琥珀 */
+  --status-done: oklch(0.58 0.15 150);       /* 绿 */
+  --ref-accent: oklch(0.55 0.17 250);        /* 引用蓝 */
+
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -159,6 +165,12 @@
   --context-warn: oklch(0.82 0.14 85);
   --context-danger: oklch(0.704 0.191 22.216);
 
+  /* agent 状态色（dark 提亮，前端宪法状态色暗变体） */
+  --status-pending: oklch(0.74 0 0);
+  --status-progress: oklch(0.82 0.14 85);
+  --status-done: oklch(0.72 0.15 150);
+  --ref-accent: oklch(0.70 0.15 250);
+
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.556 0 0);
@@ -196,6 +208,10 @@
   --color-context-ok: var(--context-ok);
   --color-context-warn: var(--context-warn);
   --color-context-danger: var(--context-danger);
+  --color-status-pending: var(--status-pending);
+  --color-status-progress: var(--status-progress);
+  --color-status-done: var(--status-done);
+  --color-ref-accent: var(--ref-accent);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
