@@ -7,6 +7,7 @@ import type { Root, Text, PhrasingContent } from 'mdast'
 import { visit } from 'unist-util-visit'
 
 // entity_id 形如 method://... / class://... / table://... / doc://...；显示文本不含 ']' 和 '|'
+// scheme 仅小写（后端 AGENT_SYSTEM_PROMPT 保证）；若后端改大写需同步放宽 [a-z]+
 const ENTITY_RE = /\[([a-z]+:\/\/[^|\]]+)\|([^\]]+)\]/g
 
 export function remarkEntityRef() {

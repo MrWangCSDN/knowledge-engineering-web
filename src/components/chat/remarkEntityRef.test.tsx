@@ -38,3 +38,15 @@ describe('remarkEntityRef', () => {
     expect(screen.getByText('乙').getAttribute('data-href')).toBe('entity:method://b')
   })
 })
+
+describe('entityUrlTransform 安全白名单', () => {
+  it('放行 entity: 与常规安全协议', () => {
+    expect(entityUrlTransform('entity:method://a')).toBe('entity:method://a')
+    expect(entityUrlTransform('https://example.com')).toBe('https://example.com')
+  })
+
+  it('拦截危险协议 javascript: / data:（清空）', () => {
+    expect(entityUrlTransform('javascript:alert(1)')).toBe('')
+    expect(entityUrlTransform('data:text/html,<script>alert(1)</script>')).toBe('')
+  })
+})
