@@ -98,6 +98,10 @@ export interface Message {
    * 用 ChatGPT 同款打字机效果展示。
    */
   raw_stream?: string
+  /** C-frontend：agent 推理增量累计（灰字折叠展示）。 */
+  thinking?: string
+  /** C-frontend：agent 多步任务 checklist（todo 事件全量快照）。 */
+  todos?: TodoItem[]
   /** ISO 8601。 */
   created_at: string
 }
@@ -118,6 +122,8 @@ export type SSEEventType =
   | 'error'          // 出错
   | 'tool_call'      // v1.3 ReAct：LLM 调工具前后各发一次
   | 'token'          // v1.6：LLM 流式输出的单个 token chunk
+  | 'thinking'       // C-frontend：agent 推理增量（灰字折叠）
+  | 'todo'           // C-frontend：多步任务 checklist 快照
 
 /**
  * SSE 事件通用包装。data 类型由具体 event 决定（见各事件 payload 类型）。
@@ -185,6 +191,16 @@ export interface TokenPayload {
   delta: string
 }
 
+/** C-frontend：todo checklist 一项（后端 todo_write 元工具，设计 §3.3）。 */
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+/** thinking 事件 payload：推理增量文本。 */
+export interface ThinkingPayload { delta: string }
+/** todo 事件 payload：当前 todo 全量快照。 */
+export interface TodoPayload { items: TodoItem[] }
+
 export interface SectionStartPayload {
   section: SectionType
   title: string
@@ -207,6 +223,8 @@ export interface DonePayload {
   total_tokens: number
   cost_yuan: number
   latency_ms: number
+  /** C-frontend：agent 实际查过的 entity_id（引用溯源，后端 Plan C2）。 */
+  cited_entities?: string[]
 }
 
 export interface ErrorPayload {

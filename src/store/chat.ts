@@ -484,6 +484,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               break
             }
 
+            case 'thinking': {
+              const delta = (data.delta as string) ?? ''
+              if (!delta) break
+              // 累加到 streaming.thinking（范式同 token 的 raw_stream 累计）
+              updateStream(sm => ({ ...sm, thinking: (sm.thinking ?? '') + delta }))
+              break
+            }
+
+            case 'todo': {
+              // 后端每次全量发当前 todo 列表 → 覆盖（非累加）
+              const items = (data.items as import('@/types/chat').TodoItem[]) ?? []
+              updateStream(sm => ({ ...sm, todos: items }))
+              break
+            }
+
             case 'step':
               break
 
@@ -511,7 +526,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             case 'done': {
               const metadata: MessageMetadata = {
                 entry_points: [],
-                cited_entities: [],
+                cited_entities: (data.cited_entities as string[]) ?? [],
                 interpretation_freshness: new Date().toISOString(),
                 token_usage: (data.total_tokens as number) ?? 0,
                 latency_ms: (data.latency_ms as number) ?? 0,
