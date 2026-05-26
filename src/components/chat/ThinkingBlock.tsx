@@ -15,6 +15,7 @@ export function ThinkingBlock({ thinking, streaming }: { thinking?: string; stre
         onClick={() => setOpen(o => !o)}
         className="inline-flex items-center gap-1 hover:text-foreground/80 transition-colors"
         aria-label="思考过程"
+        aria-expanded={expanded}
       >
         <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
         <span>思考过程{streaming ? '…' : ''}</span>
