@@ -38,6 +38,7 @@ import type {
   Reference,
   MessageMetadata,
   ToolCallPayload,
+  TodoItem,
   ContextUsage,
 } from '@/types/chat'
 import type { Session } from '@/types/session'
@@ -494,7 +495,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
             case 'todo': {
               // 后端每次全量发当前 todo 列表 → 覆盖（非累加）
-              const items = (data.items as import('@/types/chat').TodoItem[]) ?? []
+              const items = (data.items as TodoItem[]) ?? []
               updateStream(sm => ({ ...sm, todos: items }))
               break
             }
