@@ -203,14 +203,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (err) {
       const axErr = err as { response?: { status?: number } }
       if (axErr?.response?.status === 404) {
-        // 404 = sessionId 失效 → 清 currentSessionId 让 ChatPage 兜底 fallback 到 /project/{pid}
-        // 不动 streamingBySession / messagesBySession —— 别的 session 不受影响
-        set({
-          currentSessionId: null,
-          currentProjectId: projectId,
-          status: 'idle',
-          contextUsage: null,
-          error: null,
+        // 404 = sessionId 失效（被删 / 不属于该 user / 不存在）
+        // 必须清 4 件：
+        //   ① currentSessionId → null（让 ChatPage URL sync useEffect 跳到 /project/{pid}）
+        //   ② messagesBySession[sessionId] → 删（防止用户按"后退"键回到失效 URL 时
+        //      selector 还从缓存读到旧消息 — 2026-05-22 bug：清服务器记忆后，
+        //      stale React state 让主区仍显示旧对话直到用户硬刷新）
+        //   ③ streamingBySession[sessionId] → 删（同上；该 session 显然不会再流式）
+        //   ④ abortBySession[sessionId] → 删（防止泄露 AbortController）
+        // 别的 session（其他 sid 的 messagesBySession 项）不动 — 用户切到其他 session 不受影响
+        set(s => {
+          const { [sessionId]: _msgGone, ...remainingMessages } = s.messagesBySession
+          const { [sessionId]: _streamGone, ...remainingStreams } = s.streamingBySession
+          const { [sessionId]: _ctrlGone, ...remainingAborts } = s.abortBySession
+          return {
+            currentSessionId: null,
+            currentProjectId: projectId,
+            messagesBySession: remainingMessages,
+            streamingBySession: remainingStreams,
+            abortBySession: remainingAborts,
+            status: 'idle',
+            contextUsage: null,
+            error: null,
+          }
         })
         return
       }
