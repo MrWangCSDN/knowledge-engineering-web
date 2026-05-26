@@ -23,6 +23,7 @@ const MermaidDiagram = lazy(() =>
 )
 import { ToolCallCard } from './ToolCallCard'
 import { ThinkingBlock } from './ThinkingBlock'
+import { TodoList } from './TodoList'
 import { CodeBlock } from './CodeBlock'
 import { extractSectionContents } from './extractSectionContents'
 import { useThemeStore } from '@/store/theme'
@@ -188,6 +189,9 @@ export function AssistantMessage({
 
       {/* agent 推理灰字（C-frontend）*/}
       <ThinkingBlock thinking={message.thinking} streaming={streaming} />
+
+      {/* agent 多步任务 checklist（C-frontend）*/}
+      <TodoList todos={message.todos} />
 
       {/* 内容区：无 border + 平铺 */}
       {hasSections ? (
