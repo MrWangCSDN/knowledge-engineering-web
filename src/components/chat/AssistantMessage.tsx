@@ -11,7 +11,7 @@ import { lazy, Suspense, useState, useMemo } from 'react'
 import { Download } from 'lucide-react'
 // v1.8：react-markdown 把流式 raw_stream 文本实时渲染成 markdown
 // remark-gfm 加 GitHub-flavored markdown 支持（表格 / 删除线 / 任务列表）
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { remarkEntityRef, entityUrlTransform } from './remarkEntityRef'
 import { EntityRef, EntityChip, HighlightCtx } from './EntityRef'
@@ -63,6 +63,14 @@ const MD_COMPONENTS: Components = {
     }
     return <a href={href} target="_blank" rel="noreferrer" className="text-[var(--ref-accent)] underline">{props.children as React.ReactNode}</a>
   },
+}
+
+// 三处 ReactMarkdown 共用配置（DRY）：remark 插件（含 remarkEntityRef）+ entity: urlTransform + 组件覆盖。
+// entityUrlTransform 必需——否则 react-markdown v10 默认会清空 entity: scheme，内联引用 href 变空。
+const MD_REMARK_PROPS: Pick<Options, 'remarkPlugins' | 'urlTransform' | 'components'> = {
+  remarkPlugins: [remarkGfm, remarkEntityRef],
+  urlTransform: entityUrlTransform,
+  components: MD_COMPONENTS,
 }
 
 const SECTION_ICONS: Record<string, string> = {
@@ -212,7 +220,9 @@ export function AssistantMessage({
       {hasSections ? (
         <div className="space-y-5 text-[15px] leading-[1.7]">
           {sections.map((s, i) => {
-            // 单段（chit-chat 或 agent 自由格式）跳过 h3 段头
+            // 单段（chit-chat 或 agent 自由格式）跳过 h3 段头。
+            // 不变量：后端结构化答案至少 2 段（overview + 其它），故"单段"必为自由格式/chit-chat。
+            // 若将来后端会发单段的结构化答案，需改此判定。
             const headerless = s.type === 'chit-chat' || sections.length === 1
             const icon = SECTION_ICONS[s.type] ?? '📌'
             const title = s.title || SECTION_TITLES[s.type] || s.type
@@ -258,11 +268,7 @@ export function AssistantMessage({
                         [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
                         [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground
                       ">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkEntityRef]}
-                          urlTransform={entityUrlTransform}
-                          components={MD_COMPONENTS}
-                        >
+                        <ReactMarkdown {...MD_REMARK_PROPS}>
                           {chunk.value}
                         </ReactMarkdown>
                       </div>
@@ -316,7 +322,7 @@ export function AssistantMessage({
                   // 把已经完整的 content 拼起来，用 markdown 渲染
                   // 段间用 "\n\n---\n\n" 分隔，模拟原答案的段落感
                   // v1.10: components={MD_COMPONENTS} 让流式代码块也走 CodeBlock 语法高亮
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkEntityRef]} urlTransform={entityUrlTransform} components={MD_COMPONENTS}>
+                  <ReactMarkdown {...MD_REMARK_PROPS}>
                     {sectionContents.join('\n\n---\n\n')}
                   </ReactMarkdown>
                 )}
@@ -339,7 +345,7 @@ export function AssistantMessage({
                             [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
                             [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
               {/* v1.10: components={MD_COMPONENTS} 让代码块走 CodeBlock 语法高亮 */}
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkEntityRef]} urlTransform={entityUrlTransform} components={MD_COMPONENTS}>
+              <ReactMarkdown {...MD_REMARK_PROPS}>
                 {message.raw_stream}
               </ReactMarkdown>
               <span className="ml-0.5 animate-pulse">▌</span>
@@ -355,7 +361,7 @@ export function AssistantMessage({
 
       {/* agent 引用溯源 chips（C-frontend，message 级，常驻可见）*/}
       {message.metadata?.cited_entities && message.metadata.cited_entities.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <div role="group" aria-label="本答案引用实体" className="mt-3 flex flex-wrap items-center gap-1.5">
           <span className="text-[12px] text-muted-foreground">本答案引用：</span>
           {message.metadata.cited_entities.map((id) => (
             <EntityChip key={id} entityId={id} />
