@@ -235,8 +235,7 @@ describe('AssistantMessage — Mermaid 集成', () => {
       created_at: '',
     }
     render(<AssistantMessage message={message} streaming />)
-    // 显示结构化 sections
-    expect(screen.getByText(/业务概述/)).toBeInTheDocument()
+    // 显示结构化 sections 内容（单段自由格式，h3 段头已隐藏，但 content 仍渲染）
     expect(screen.getByText(/答案/)).toBeInTheDocument()
     // 不显示 raw_stream（避免重复）
     expect(screen.queryByText(/一些原始流文本/)).not.toBeInTheDocument()
@@ -420,16 +419,25 @@ describe('AssistantMessage: chit-chat section', () => {
       session_id: 's1',
       role: 'assistant' as const,
       content: '',
-      sections: [{
-        type: 'overview' as const,
-        title: '业务概述',
-        content: 'overview 内容',
-        references: [],
-      }],
+      // 多段（sections.length > 1）仍然显示 h3 段头
+      sections: [
+        {
+          type: 'overview' as const,
+          title: '业务概述',
+          content: 'overview 内容',
+          references: [],
+        },
+        {
+          type: 'entry_point' as const,
+          title: '入口方法',
+          content: 'entry 内容',
+          references: [],
+        },
+      ],
       created_at: '2026-05-14T00:00:00Z',
     }
     render(<AssistantMessage message={message} />)
-    // overview 类型仍带 emoji + title
-    expect(screen.getByText(/📋\s*业务概述/)).toBeInTheDocument()
+    // overview 类型仍带 emoji + title（多段模式下 h3 正常渲染）
+    expect(screen.getByRole('heading', { name: /业务概述/ })).toBeInTheDocument()
   })
 })

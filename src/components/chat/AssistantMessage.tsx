@@ -7,12 +7,14 @@
  * v1（W5）：纯文本渲染。
  * v1.4（W14）：call_chain 段含 ```mermaid 块时分流给 MermaidDiagram。
  */
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useState, useMemo } from 'react'
 import { Download } from 'lucide-react'
 // v1.8：react-markdown 把流式 raw_stream 文本实时渲染成 markdown
 // remark-gfm 加 GitHub-flavored markdown 支持（表格 / 删除线 / 任务列表）
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { remarkEntityRef, entityUrlTransform } from './remarkEntityRef'
+import { EntityRef, EntityChip, HighlightCtx } from './EntityRef'
 
 import type { Message } from '@/types/chat'
 import { exportMessageAsDocx } from '@/api/sessions'
@@ -53,6 +55,14 @@ const MD_COMPONENTS: Components = {
   },
   // 让 ReactMarkdown 渲染 fenced code 时不再包外层 <pre>（CodeBlock 自带容器）
   pre: (props) => <>{props.children as React.ReactNode}</>,
+  // entity: scheme 链接 → EntityRef 组件；其余链接走普通 <a>
+  a: (props) => {
+    const href = (props.href as string) || ''
+    if (href.startsWith('entity:')) {
+      return <EntityRef entityId={href.slice('entity:'.length)}>{props.children as React.ReactNode}</EntityRef>
+    }
+    return <a href={href} target="_blank" rel="noreferrer" className="text-[var(--ref-accent)] underline">{props.children as React.ReactNode}</a>
+  },
 }
 
 const SECTION_ICONS: Record<string, string> = {
@@ -137,6 +147,10 @@ export function AssistantMessage({
   const theme = useThemeStore(s => s.theme)
   // v1.5 下载按钮的 loading 态（防止用户连点）
   const [exporting, setExporting] = useState(false)
+  // agent 引用高亮：message 级激活实体（点击 EntityRef / EntityChip 后同步）
+  const [activeEntity, setActiveEntity] = useState<string | null>(null)
+  // useMemo 避免每次渲染都产生新对象导致 HighlightCtx.Provider 触发下游重渲染
+  const highlightValue = useMemo(() => ({ active: activeEntity, setActive: setActiveEntity }), [activeEntity])
 
   /**
    * 触发下载：调 api 拿 blob 并把它推给浏览器另存为。
@@ -164,6 +178,7 @@ export function AssistantMessage({
   const canExport = Boolean(projectId) && !streaming && hasSections
 
   return (
+    <HighlightCtx.Provider value={highlightValue}>
     <div className="my-6 group">
       {/* 头：极小角标 + 思考状态 */}
       <div className="flex items-center gap-1.5 mb-2 text-[12px] text-muted-foreground">
@@ -197,8 +212,8 @@ export function AssistantMessage({
       {hasSections ? (
         <div className="space-y-5 text-[15px] leading-[1.7]">
           {sections.map((s, i) => {
-            // v1.2: chit-chat 类型跳过 h3 header（单段无标题清爽渲染）
-            const isChitChat = s.type === 'chit-chat'
+            // 单段（chit-chat 或 agent 自由格式）跳过 h3 段头
+            const headerless = s.type === 'chit-chat' || sections.length === 1
             const icon = SECTION_ICONS[s.type] ?? '📌'
             const title = s.title || SECTION_TITLES[s.type] || s.type
             // 只对 call_chain 段拆 mermaid；其他段直接当文本（更快、避免误判）
@@ -209,8 +224,8 @@ export function AssistantMessage({
                 : [{ type: 'text' as const, value: s.content || '' }]
             return (
               <div key={i}>
-                {/* v1.2: chit-chat 类型跳过 h3 header（不显示 emoji + section title）*/}
-                {!isChitChat && (
+                {/* v1.2: chit-chat / 单段自由格式跳过 h3 header */}
+                {!headerless && (
                   <h3 className="font-semibold text-[15px] mb-1.5 text-foreground">
                     {icon} {title}
                   </h3>
@@ -244,7 +259,8 @@ export function AssistantMessage({
                         [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground
                       ">
                         <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
+                          remarkPlugins={[remarkGfm, remarkEntityRef]}
+                          urlTransform={entityUrlTransform}
                           components={MD_COMPONENTS}
                         >
                           {chunk.value}
@@ -300,7 +316,7 @@ export function AssistantMessage({
                   // 把已经完整的 content 拼起来，用 markdown 渲染
                   // 段间用 "\n\n---\n\n" 分隔，模拟原答案的段落感
                   // v1.10: components={MD_COMPONENTS} 让流式代码块也走 CodeBlock 语法高亮
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkEntityRef]} urlTransform={entityUrlTransform} components={MD_COMPONENTS}>
                     {sectionContents.join('\n\n---\n\n')}
                   </ReactMarkdown>
                 )}
@@ -323,7 +339,7 @@ export function AssistantMessage({
                             [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
                             [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
               {/* v1.10: components={MD_COMPONENTS} 让代码块走 CodeBlock 语法高亮 */}
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkEntityRef]} urlTransform={entityUrlTransform} components={MD_COMPONENTS}>
                 {message.raw_stream}
               </ReactMarkdown>
               <span className="ml-0.5 animate-pulse">▌</span>
@@ -334,6 +350,16 @@ export function AssistantMessage({
         <div className="text-[15px] leading-[1.7] whitespace-pre-wrap text-foreground/85">
           {message.content || (streaming ? '…' : '(空回答)')}
           {streaming && <span className="ml-0.5 animate-pulse">▌</span>}
+        </div>
+      )}
+
+      {/* agent 引用溯源 chips（C-frontend，message 级，常驻可见）*/}
+      {message.metadata?.cited_entities && message.metadata.cited_entities.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-[12px] text-muted-foreground">本答案引用：</span>
+          {message.metadata.cited_entities.map((id) => (
+            <EntityChip key={id} entityId={id} />
+          ))}
         </div>
       )}
 
@@ -368,5 +394,6 @@ export function AssistantMessage({
         </div>
       )}
     </div>
+    </HighlightCtx.Provider>
   )
 }
