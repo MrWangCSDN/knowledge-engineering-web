@@ -1,25 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import ReactMarkdown, { type Components } from 'react-markdown'
-import { remarkEntityRef } from './remarkEntityRef'
+import { remarkEntityRef, entityUrlTransform } from './remarkEntityRef'
 
 const comps: Components = {
   a: ({ href, children }) => <a data-href={href}>{children}</a>,
-}
-
-// react-markdown v10 默认只允许 https?/mailto 等协议，entity: 会被清空。
-// 这里提供自定义 urlTransform：entity: 开头的 url 直接透传，其余走默认逻辑。
-function allowEntityUrl(url: string): string {
-  if (url.startsWith('entity:')) return url
-  // 默认安全协议白名单（https?/ircs?/mailto/xmpp）
-  const safeProtocol = /^(https?|ircs?|mailto|xmpp):/i
-  try {
-    const parsed = new URL(url)
-    return safeProtocol.test(parsed.protocol) ? url : ''
-  } catch {
-    // 相对 URL 直接放行
-    return url
-  }
 }
 
 function md(src: string) {
@@ -27,7 +12,7 @@ function md(src: string) {
     <ReactMarkdown
       remarkPlugins={[remarkEntityRef]}
       components={comps}
-      urlTransform={allowEntityUrl}
+      urlTransform={entityUrlTransform}
     >
       {src}
     </ReactMarkdown>,

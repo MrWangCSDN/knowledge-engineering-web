@@ -38,3 +38,21 @@ export function remarkEntityRef() {
     })
   }
 }
+
+/**
+ * react-markdown 的 urlTransform：默认只放行 https?/ircs?/mailto/xmpp，会把
+ * remarkEntityRef 产出的 entity: url 清空。这里让 entity: 直接透传，其余仍走默认安全白名单。
+ * AssistantMessage 的 <ReactMarkdown urlTransform={entityUrlTransform}> 必须用它，
+ * 否则内联引用 href 为空、EntityRef 渲染不出来。
+ */
+export function entityUrlTransform(url: string): string {
+  if (url.startsWith('entity:')) return url
+  const safeProtocol = /^(https?|ircs?|mailto|xmpp):/i
+  try {
+    const parsed = new URL(url)
+    return safeProtocol.test(parsed.protocol) ? url : ''
+  } catch {
+    // 相对 URL 直接放行
+    return url
+  }
+}
