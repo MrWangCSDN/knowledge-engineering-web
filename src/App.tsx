@@ -28,6 +28,10 @@ import { lazy, Suspense } from 'react'
 // AppLayout：页面外壳（导航栏、侧边栏等），内部必须有 <Outlet /> 才能渲染子路由
 // **不 lazy**：所有受保护页面都要它，单独 chunk 反而增加请求数
 import { AppLayout } from '@/components/layout/AppLayout'
+// InfraBanner：基础设施不可用横幅 —— 放在 App 顶层（routes 之外），
+// 让登录页也能看到，覆盖「mysql 挂时用户连登录都看不到错误」的场景
+import { InfraBanner } from '@/components/layout/InfraBanner'
+import { useInfraHealthBootstrap } from '@/hooks/useInfraHealthBootstrap'
 // RequireAuth：路由守卫组件；同样所有页面都用，保持静态
 import { RequireAuth } from '@/components/auth/RequireAuth'
 // 登录页 **不 lazy**：第一屏（也是用户最常进入的入口），保持快速首屏
@@ -81,10 +85,14 @@ function RouteSuspenseFallback() {
 
 // 默认导出 —— 与原文件保持一致（default export）
 export default function App() {
+  // mount 时调一次 /health（全局，覆盖登录页和登录后所有页面）
+  useInfraHealthBootstrap()
   return (
     // v1.9.1：用 Suspense 包外层，捕获所有 lazy 组件的加载等待
     // 一个 Suspense 覆盖全 Routes 是最简模型；细粒度需求可再拆
     <Suspense fallback={<RouteSuspenseFallback />}>
+      {/* InfraBanner：顶层注入，sticky top-0 让任何路由（含 /login）都能看到「系统不可用」 */}
+      <InfraBanner />
       <Routes>
         {/* ── 公开路由 ──────────────────────────────────────────────── */}
         {/* /login 不经过 RequireAuth，任何人（包括未登录用户）都可访问 */}
