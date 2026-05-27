@@ -3,7 +3,9 @@ import { Outlet } from 'react-router-dom'
 
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MainHeader } from '@/components/layout/MainHeader'
+import { InfraBanner } from '@/components/layout/InfraBanner'
 import { useProjectStore } from '@/store/projects'
+import { useInfraHealthBootstrap } from '@/hooks/useInfraHealthBootstrap'
 
 /**
  * 应用整体布局：左右两栏。
@@ -14,9 +16,15 @@ import { useProjectStore } from '@/store/projects'
  *  - 两栏各自管自己的滚动
  *
  * 挂载时拉工程列表（Main header 选择器要用）。
+ * 同时在此处触发一次 /health 检查（useInfraHealthBootstrap），
+ * 确保 InfraBanner 在应用打开时即可反映基础设施状态。
+ * 设计：[[基础设施健康检查与产品不可用-设计]] §4.2
  */
 export function AppLayout() {
   const fetchProjects = useProjectStore(s => s.fetchProjects)
+
+  // 挂载时触发一次 /health fetch；后续被动检测由 axios/SSE 拦截器承担
+  useInfraHealthBootstrap()
 
   useEffect(() => {
     fetchProjects()
@@ -26,6 +34,8 @@ export function AppLayout() {
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden">
+        {/* 基础设施不可用横幅：sticky top-0，所有页面可见；healthy 时自动隐藏（InfraBanner 内部判断）*/}
+        <InfraBanner />
         <MainHeader />
         {/*
           Outlet wrapper: flex-1 让子页面占剩余高度，min-h-0 允许 flex-col 内部缩小。

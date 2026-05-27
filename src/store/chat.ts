@@ -364,6 +364,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
+        // 识别 503 INFRA_UNHEALTHY → 标记 infra store，让 InfraBanner 立即弹出
+        // SSE 用的是原生 fetch，不经过 axios 拦截器，需要在这里单独处理
+        // 设计：[[基础设施健康检查与产品不可用-设计]] §4.7
+        if (res.status === 503) {
+          try {
+            // JSON.parse：把响应体字符串解析成 JS 对象；若 body 不是合法 JSON 会抛异常，用 catch 忽略
+            const body = JSON.parse(text) as { detail?: { code?: string } }
+            if (body?.detail?.code === 'INFRA_UNHEALTHY') {
+              // dynamic import：运行时按需加载，避免与 client.ts 形成循环依赖
+              const { useInfraStore } = await import('@/store/infra')
+              useInfraStore.getState().markUnhealthy('SSE 503 INFRA_UNHEALTHY')
+            }
+          } catch { /* JSON parse 失败时忽略，不影响主流程的错误抛出 */ }
+        }
         throw new Error(`HTTP ${res.status}: ${text || res.statusText}`)
       }
       if (!res.body) throw new Error('Empty response body')

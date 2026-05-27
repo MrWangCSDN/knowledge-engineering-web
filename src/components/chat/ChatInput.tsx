@@ -22,6 +22,9 @@ import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
 import { ArrowUp, Plus, Square, Mic } from 'lucide-react'
 
 import { ModelSwitcher } from './ModelSwitcher'
+// useInfraStore：基础设施健康状态；healthy=false 时禁用输入，防止用户发出无法处理的请求
+// 设计：[[基础设施健康检查与产品不可用-设计]] §4.4
+import { useInfraStore } from '@/store/infra'
 
 interface Props {
   onSend: (text: string) => void
@@ -48,6 +51,11 @@ export function ChatInput({
   const [value, setValue] = useState('')
   const [composing, setComposing] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
+
+  // healthy：false 时说明基础设施不可用，需要禁用输入框和发送按钮
+  // 用 selector 细粒度订阅，避免不必要的 re-render
+  // 设计：[[基础设施健康检查与产品不可用-设计]] §4.4
+  const healthy = useInfraStore(s => s.healthy)
 
   // 自适应高度
   useEffect(() => {
@@ -76,7 +84,8 @@ export function ChatInput({
 
   const submit = () => {
     const text = value.trim()
-    if (!text || loading) return
+    // !healthy：基础设施不可用时也阻止提交，与 button disabled 逻辑保持一致
+    if (!text || loading || !healthy) return
     onSend(text)
     setValue('')
     // 发送后立即 refocus（用户可在 LLM 流式期间继续打下一句）
@@ -131,8 +140,10 @@ export function ChatInput({
           onKeyDown={onKeyDown}
           onCompositionStart={() => setComposing(true)}
           onCompositionEnd={() => setComposing(false)}
-          placeholder={placeholder}
-          disabled={disabled || loading}
+          // !healthy 时优先展示"系统不可用"提示；其余情况用调用方传入的 placeholder
+          placeholder={!healthy ? '系统暂时不可用，请等待恢复…' : placeholder}
+          // disabled 优先级：父组件 disabled（归档态）> 基础设施不可用 > loading 中
+          disabled={disabled || !healthy || loading}
           rows={1}
           className={`
             flex-1 bg-transparent resize-none outline-none border-0
@@ -164,9 +175,17 @@ export function ChatInput({
           <button
             type="button"
             onClick={loading ? onAbort : submit}
-            disabled={disabled || (!loading && !hasText)}
+            // 停止按钮（loading 时）不受 healthy 限制——用户应能随时中止流式输出
+            // 发送按钮：禁用条件 = 父组件 disabled | 基础设施不可用 | 无内容
+            disabled={disabled || (!loading && (!hasText || !healthy))}
             aria-label={loading ? '停止生成' : '发送'}
-            title={loading ? '停止生成（中断流式输出）' : '发送（Enter）'}
+            title={
+              loading
+                ? '停止生成（中断流式输出）'
+                : !healthy
+                  ? '系统暂时不可用'
+                  : '发送（Enter）'
+            }
             className={`
               h-8 w-8 rounded-full
               flex items-center justify-center

@@ -222,3 +222,40 @@ apiClient.interceptors.response.use(
     return Promise.reject(err)
   },
 )
+
+// ─────────── 响应拦截器：503 INFRA_UNHEALTHY → 标记 infra store ───────────
+
+/**
+ * 被动检测基础设施状态：任意 axios 请求收到 503 + body.detail.code='INFRA_UNHEALTHY' 时，
+ * 立即标记 infra store，让 InfraBanner 立刻弹出，无需等待下一次定期 /health 轮询。
+ *
+ * 使用 dynamic import('@/store/infra') 而非顶层 import 的原因：
+ *   - 避免 client.ts ↔ infra.ts 之间可能形成的模块循环依赖（circular import）
+ *   - dynamic import 在 Vite/webpack 中会懒加载，也不影响 tree-shaking
+ *   - .then() 是 Promise 的方法，表示"异步完成后执行"；这里不需要 await，fire-and-forget 即可
+ *
+ * 设计：[[基础设施健康检查与产品不可用-设计]] §4.6
+ */
+apiClient.interceptors.response.use(
+  // 成功响应直接透传（不干预 2xx）
+  r => r,
+  (error: AxiosError) => {
+    // error.response?.status：可选链，网络错误时 response 为 undefined，?. 避免 TypeError
+    if (
+      error.response?.status === 503 &&
+      // error.response.data 在 TS 里是 unknown 类型，需要类型断言才能访问嵌套属性
+      // 'as { detail?: { code?: string } }' 告诉 TS 这个对象的结构，
+      // 再配合 ?. 保证实际运行时若结构不符也不会抛 TypeError
+      (error.response.data as { detail?: { code?: string } })?.detail?.code === 'INFRA_UNHEALTHY'
+    ) {
+      // dynamic import：运行时动态加载模块，返回 Promise<module>
+      // .then(({ useInfraStore }) => ...) 是解构 + 链式调用的组合写法
+      import('@/store/infra').then(({ useInfraStore }) => {
+        // getState() 是 Zustand 提供的"在 React 组件外调用 store action"的方式
+        useInfraStore.getState().markUnhealthy('axios 503 INFRA_UNHEALTHY')
+      })
+    }
+    // 无论是否标记 infra，都把错误继续向上抛，调用方仍能感知到请求失败
+    return Promise.reject(error)
+  },
+)
