@@ -51,11 +51,12 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     }
 
     // 新 tab：先插 loading 占位，让抽屉立即可见、减少视觉空白
-    set({
+    // 用函数式 set(s => ...) 读最新 tabs，与下方 try/catch 一致——严格防并发 openEntity 互相覆盖占位
+    set(s => ({
       open: true,
       activeEntityId: entityId,
-      tabs: [...tabs, { entityId, snippet: null, loading: true, error: null }],
-    })
+      tabs: [...s.tabs, { entityId, snippet: null, loading: true, error: null }],
+    }))
 
     try {
       const snippet = await getCodeSnippet(projectId, entityId)
