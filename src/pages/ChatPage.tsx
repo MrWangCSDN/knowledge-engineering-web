@@ -9,7 +9,7 @@
  *
  * 设计文档：[[首页设计]] §3
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'    // lazy + Suspense：实现组件懒加载（code-splitting），只在首次需要时下载对应 chunk
 import { useParams, useNavigate, Navigate } from 'react-router-dom'
 
 import { useProjectStore } from '@/store/projects'
@@ -20,8 +20,13 @@ import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
 import { ContextWindowBar } from '@/components/chat/ContextWindowBar'
 import type { Message } from '@/types/chat'
-// 代码片段查看器抽屉：fixed 叠加层，挂在 ChatPage 最外层容器内即可
-import { CodeViewerDrawer } from '@/components/code/CodeViewerDrawer'
+// 代码片段查看器抽屉懒加载：Monaco 体积大（~2MB），按需下载不拖累首屏。
+// lazy() 接收一个动态 import() 函数；.then(m => ({ default: m.CodeViewerDrawer })) 把具名导出适配为 default 导出，
+// 因为 React.lazy 要求模块必须有 default export（不支持具名导出）。
+// 等效于：const CodeViewerDrawer = React.lazy(() => import('@/components/code/CodeViewerDrawer').then(...))
+const CodeViewerDrawer = lazy(() =>
+  import('@/components/code/CodeViewerDrawer').then(m => ({ default: m.CodeViewerDrawer }))
+)
 // 代码片段查看器 store：用于将当前 projectId 注入到 store（openEntity 拼 URL 时需要）
 import { useCodeViewerStore } from '@/store/codeViewer'
 
@@ -225,8 +230,8 @@ export function ChatPage() {
             placeholder="该对话已归档，无法继续提问"
           />
         </div>
-        {/* 代码片段查看器抽屉：fixed 叠加层，不影响页面布局，挂在根容器末尾即可 */}
-        <CodeViewerDrawer />
+        {/* 代码片段查看器抽屉：Suspense fallback=null，抽屉本就按需出现，加载期不显示占位无妨 */}
+        <Suspense fallback={null}><CodeViewerDrawer /></Suspense>
       </div>
     )
   }

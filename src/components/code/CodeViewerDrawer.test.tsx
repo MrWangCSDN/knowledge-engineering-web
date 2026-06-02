@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { useCodeViewerStore } from '@/store/codeViewer'
 
+// 副作用 mock：阻止 monacoSetup 在测试环境导入真实 monaco-editor（jsdom 不支持 document.queryCommandSupported）
+vi.mock('@/lib/monacoSetup', () => ({}))
 vi.mock('@monaco-editor/react', () => ({ default: ({ value }: { value: string }) => <div data-testid="monaco">{value}</div>, loader: { config: vi.fn() } }))
 vi.mock('@/store/theme', () => ({ useThemeStore: (sel: (s: { theme: string }) => unknown) => sel({ theme: 'light' }) }))
 

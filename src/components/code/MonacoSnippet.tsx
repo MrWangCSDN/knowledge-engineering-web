@@ -1,8 +1,9 @@
 // src/components/code/MonacoSnippet.tsx
 // 用 Monaco 渲染一段代码片段，把后端 callees 调用点标成可点击装饰，点击 → openEntity 跳转。
 // 设计 [[代码片段查看器-设计]] §5。@monaco-editor/react 内部懒加载 Monaco。
+import '@/lib/monacoSetup'                                            // 自托管 Monaco（worker + loader.config），副作用导入；保证 Editor 首次渲染前已配置好
 import { useRef } from 'react'                                        // useRef：保存不触发重渲染的可变引用
-import Editor, { type OnMount } from '@monaco-editor/react'           // Monaco 编辑器封装（懒加载 Monaco 核心）
+import Editor, { type OnMount } from '@monaco-editor/react'           // Monaco 编辑器封装（使用 monacoSetup 注入的本地 monaco，不走 CDN）
 import type { CodeSnippet } from '@/types/codeSnippet'                // 只引入类型（编译后无运行时代码）
 import { computeCalleeDecorations } from './calleeDecorations'        // 调用点坐标换算纯函数
 import { useCodeViewerStore } from '@/store/codeViewer'              // Zustand store：openEntity 跳转
