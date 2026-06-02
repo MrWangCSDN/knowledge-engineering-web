@@ -6,9 +6,20 @@
 import type { Root, Text, PhrasingContent } from 'mdast'
 import { visit } from 'unist-util-visit'
 
-// entity_id 形如 method://... / class://... / table://... / doc://...；显示文本不含 ']' 和 '|'
+// entity_id 形如 method://... / class://... / table://... / doc://...
 // scheme 仅小写（后端 AGENT_SYSTEM_PROMPT 保证）；若后端改大写需同步放宽 [a-z]+
-const ENTITY_RE = /\[([a-z]+:\/\/[^|\]]+)\|([^\]]+)\]/g
+//
+// 关于 display text 的字符约束（2026-06-02 重审）：
+// - entity_id 段：`[^|\s\]]+` — 不允许 `|` / 空白 / `]`（URL 不可能有这些）
+// - display 段：`(?:\\]|\\\||[^\n\]])+` — 允许 `|`（如 `Map.put(K|V)` 含 union 类型），
+//                禁止换行（防止跨段误吸），允许 `\]` `\|` 反斜杠转义
+//   → match 后用 `unescapeDisplay()` 还原转义
+const ENTITY_RE = /\[([a-z]+:\/\/[^|\s\]]+)\|((?:\\\]|\\\||[^\n\]])+)\]/g
+
+// 还原 display 里的反斜杠转义：\] → ]、\| → |
+function unescapeDisplay(s: string): string {
+  return s.replace(/\\([\]|])/g, '$1')
+}
 
 export function remarkEntityRef() {
   return (tree: Root) => {
@@ -24,7 +35,9 @@ export function remarkEntityRef() {
       let m: RegExpExecArray | null
       while ((m = ENTITY_RE.exec(value)) !== null) {
         if (m.index > last) out.push({ type: 'text', value: value.slice(last, m.index) })
-        const [, entityId, display] = m
+        const [, entityId, displayRaw] = m
+        // display 里允许的 \] / \| 反斜杠转义需要还原成真实字符
+        const display = unescapeDisplay(displayRaw)
         out.push({
           type: 'link',
           url: `entity:${entityId}`,

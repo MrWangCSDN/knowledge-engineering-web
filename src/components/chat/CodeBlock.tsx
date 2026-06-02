@@ -28,6 +28,9 @@ import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
 import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup'
+// 2026-06-02：diff 高亮 — LLM 回答里贴 git diff / patch 时之前 fallback 为 plain，
+// 现在显式注册，给增删行上色（绿/红）
+import diff from 'react-syntax-highlighter/dist/esm/languages/prism/diff'
 
 SyntaxHighlighter.registerLanguage('java', java)
 SyntaxHighlighter.registerLanguage('python', python)
@@ -46,6 +49,8 @@ SyntaxHighlighter.registerLanguage('yaml', yaml)
 SyntaxHighlighter.registerLanguage('yml', yaml)
 SyntaxHighlighter.registerLanguage('xml', markup)
 SyntaxHighlighter.registerLanguage('html', markup)
+SyntaxHighlighter.registerLanguage('diff', diff)
+SyntaxHighlighter.registerLanguage('patch', diff)
 
 import { useThemeStore } from '@/store/theme'
 
@@ -58,6 +63,8 @@ interface Props {
   inline?: boolean
   /** 自定义 children for inline rendering */
   children?: ReactNode
+  /** 2026-06-02：fence info 解析出的文件名（```java title="Foo.java"）；存在时 header 显示文件名 + lang badge */
+  title?: string
 }
 
 /** 友好的语言显示名（小写 lang → 显示名） */
@@ -79,9 +86,11 @@ const LANG_LABELS: Record<string, string> = {
   yml: 'YAML',
   xml: 'XML',
   html: 'HTML',
+  diff: 'Diff',
+  patch: 'Patch',
 }
 
-export function CodeBlock({ language, value, inline, children }: Props) {
+export function CodeBlock({ language, value, inline, children, title }: Props) {
   const theme = useThemeStore(s => s.theme)
   const [copied, setCopied] = useState(false)
 
@@ -109,11 +118,24 @@ export function CodeBlock({ language, value, inline, children }: Props) {
 
   return (
     <div className="my-3 rounded-lg overflow-hidden border bg-code-bg">
-      {/* Header: 语言名 + 复制按钮 */}
+      {/* Header: (文件名)? + 语言名 + 复制按钮
+          2026-06-02：fence 有 title="Foo.java" 时，文件名显眼，lang 缩成小 badge — ChatGPT 同款 */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b text-[12px]">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Code2 className="h-3.5 w-3.5" />
-          <span>{langLabel}</span>
+        <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+          <Code2 className="h-3.5 w-3.5 shrink-0" />
+          {title ? (
+            <>
+              {/* truncate 防止超长文件名撑爆 header；font-mono 更像"文件名"质感 */}
+              <span className="font-mono text-foreground truncate" title={title}>
+                {title}
+              </span>
+              <span className="px-1.5 py-px rounded bg-muted text-[10.5px] uppercase tracking-wide shrink-0">
+                {langLabel}
+              </span>
+            </>
+          ) : (
+            <span>{langLabel}</span>
+          )}
         </div>
         <button
           type="button"

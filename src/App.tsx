@@ -38,6 +38,9 @@ import { RequireAuth } from '@/components/auth/RequireAuth'
 import { LoginPage } from '@/pages/LoginPage'
 // RootRedirect 体积极小（30 行），不值得拆 chunk
 import { RootRedirect } from '@/pages/RootRedirect'
+// dev only：markdown 渲染验证页 — 不走 RequireAuth，方便快速调样式
+// 验证完可以连同 /dev/md-preview 路由一起删
+import { DevMarkdownPreview } from '@/pages/DevMarkdownPreview'
 
 // ─── v1.9.1：业务页面全部 lazy load ───────────────────────────────────
 //
@@ -97,6 +100,8 @@ export default function App() {
         {/* ── 公开路由 ──────────────────────────────────────────────── */}
         {/* /login 不经过 RequireAuth，任何人（包括未登录用户）都可访问 */}
         <Route path="/login" element={<LoginPage />} />
+        {/* dev only：markdown 渲染验证页 — 不需要登录 */}
+        <Route path="/dev/md-preview" element={<DevMarkdownPreview />} />
 
         {/* ── 受保护路由组 ──────────────────────────────────────────── */}
         {/*

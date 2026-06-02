@@ -45,6 +45,28 @@ function unescapeJsonString(s: string): string {
 
 
 /**
+ * 防御性 safeguard：如果一段 content 里出现了奇数个 ``` fence 标记，
+ * 说明 LLM 在这段里开了 fence 但忘了闭合（或被截断），自动补一个 ``` 收尾。
+ *
+ * 为什么必须做：调用方会把多段 content 用 `\n\n---\n\n` join 起来传给 ReactMarkdown，
+ * 如果某段 fence 没闭合，分隔符 `---` 会被当成 fence 内的源码渲染，
+ * 整段往下的 markdown 全部破坏（表格 / 标题 / 列表全失效）。
+ *
+ * 算法：数 ``` 出现次数；奇数补一行 ``` 到末尾。
+ * （不识别"行内的三反引号" —— 几乎不会有人在文档里写三个 backtick；权衡过容错收益足够）
+ */
+function ensureClosedFences(s: string): string {
+  // matchAll 比 match(/.../g).length 更显式，且对空字符串安全
+  const fences = s.match(/```/g)
+  if (fences && fences.length % 2 !== 0) {
+    // 末尾不一定有换行，补 \n``` 保证 fence 单独成行被 remark-gfm 识别
+    return s + '\n```'
+  }
+  return s
+}
+
+
+/**
  * 提取流式 raw_stream 里所有"已完整"的 section.content。
  *
  * @param raw 流式累积的原始文本（可能含 ```json fence + 半截 JSON）
@@ -63,7 +85,8 @@ export function extractSectionContents(raw: string): string[] {
   CONTENT_RE.lastIndex = 0
   while ((match = CONTENT_RE.exec(raw)) !== null) {
     // match[1] 是捕获组里的内容（带转义）
-    results.push(unescapeJsonString(match[1]))
+    // 先 unescape JSON → 再 ensureClosedFences 防止半截 fence 把后续 `---` 分隔符吞掉
+    results.push(ensureClosedFences(unescapeJsonString(match[1])))
   }
   return results
 }

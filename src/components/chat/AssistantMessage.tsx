@@ -7,13 +7,29 @@
  * v1（W5）：纯文本渲染。
  * v1.4（W14）：call_chain 段含 ```mermaid 块时分流给 MermaidDiagram。
  */
-import { lazy, Suspense, useState, useMemo } from 'react'
+import { lazy, Suspense, useState, useMemo, useDeferredValue } from 'react'
 import { Download } from 'lucide-react'
 // v1.8：react-markdown 把流式 raw_stream 文本实时渲染成 markdown
 // remark-gfm 加 GitHub-flavored markdown 支持（表格 / 删除线 / 任务列表）
 import ReactMarkdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+// 2026-06-02：数学公式支持 — $E=mc^2$ 行内 / $$\sum$$ 块级；
+// remark-math 把 $$ / $ 切成 math/inlineMath 节点；rehype-katex 用 KaTeX 库渲染成 HTML
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+// 2026-06-02：让 react-markdown 处理 raw HTML（默认会丢）；
+// 主要是支持后端 _fix_gfm_table_cells 在表格 cell 内输出 <br>。
+// 安全性说明：LLM 输出由我们的后端 prompt 控制，非用户直接输入；
+// 风险来源是"LLM 被诱导回显用户的 <script>"——这层信任与系统其它环节一致，
+// 不在此处单独引入 rehype-sanitize（会破坏 KaTeX 自带的 className/MathML）
+import rehypeRaw from 'rehype-raw'
+// KaTeX 自带 22KB CSS（字形/字号/对齐），不引入数学会显示为 raw HTML
+// 放在 AssistantMessage（chat lazy chunk）里加载，登录页等非 chat 路由不付这个成本
+import 'katex/dist/katex.min.css'
 import { remarkEntityRef, entityUrlTransform } from './remarkEntityRef'
+import { remarkNormalizePunct } from './remarkNormalizePunct'
+import { remarkCodeMeta, parseCodeTitle } from './remarkCodeMeta'
+import { remarkCallout } from './remarkCallout'
 import { EntityRef, EntityChip } from './EntityRef'
 import { HighlightCtx } from './HighlightCtx'
 
@@ -52,7 +68,11 @@ const MD_COMPONENTS: Components = {
     // fenced ```lang ... ``` → 走 CodeBlock
     const language = className.replace('language-', '')
     const codeText = String(children ?? '').replace(/\n$/, '')
-    return <CodeBlock language={language} value={codeText} />
+    // 2026-06-02：解析 ```lang title="Foo.java" 里的文件名
+    // remarkCodeMeta 已经把 meta 字符串挂到 data-meta 属性上
+    const meta = (props as { 'data-meta'?: string })['data-meta']
+    const title = parseCodeTitle(meta)
+    return <CodeBlock language={language} value={codeText} title={title} />
   },
   // 让 ReactMarkdown 渲染 fenced code 时不再包外层 <pre>（CodeBlock 自带容器）
   pre: (props) => <>{props.children as React.ReactNode}</>,
@@ -64,15 +84,116 @@ const MD_COMPONENTS: Components = {
     }
     return <a href={href} target="_blank" rel="noreferrer" className="text-[var(--ref-accent)] underline">{props.children as React.ReactNode}</a>
   },
+  // ── GFM 表格（2026-06-02）──
+  // 不在容器里写 [&_table] 子选择器，因为外层容器 leading-[1.7] 会被表格继承，
+  // 让单元格视觉行高过大产生"竖向错位"感（用户截图问题）。
+  // 这里直接覆盖 th/td 自带 leading-[1.55]，并把表格塞进 overflow-x-auto 容器，
+  // 视觉对齐 ChatGPT / open-webui。颜色全部走 design token，不硬编码。
+  table: (props) => (
+    <div className="my-3 overflow-x-auto rounded-md border border-border">
+      <table
+        className="w-full border-collapse text-[13.5px]"
+        {...(props as React.HTMLAttributes<HTMLTableElement>)}
+      />
+    </div>
+  ),
+  thead: (props) => (
+    <thead
+      className="bg-muted/60"
+      {...(props as React.HTMLAttributes<HTMLTableSectionElement>)}
+    />
+  ),
+  tr: (props) => (
+    <tr
+      className="border-b border-border last:border-0"
+      {...(props as React.HTMLAttributes<HTMLTableRowElement>)}
+    />
+  ),
+  th: (props) => (
+    <th
+      className="px-3 py-2 text-left font-semibold text-foreground leading-[1.55] whitespace-nowrap"
+      {...(props as React.ThHTMLAttributes<HTMLTableCellElement>)}
+    />
+  ),
+  td: (props) => (
+    <td
+      className="px-3 py-2 align-top text-foreground/85 leading-[1.55]"
+      {...(props as React.TdHTMLAttributes<HTMLTableCellElement>)}
+    />
+  ),
+  // GFM 删除线 ~~xxx~~
+  del: (props) => (
+    <del
+      className="text-muted-foreground"
+      {...(props as React.HTMLAttributes<HTMLElement>)}
+    />
+  ),
+  // GFM 任务列表 - [x] / - [ ]（remark-gfm 输出 disabled checkbox）
+  input: (props) => {
+    if (props.type === 'checkbox') {
+      return (
+        <input
+          {...(props as React.InputHTMLAttributes<HTMLInputElement>)}
+          className="mr-1.5 align-middle accent-[var(--ref-accent)]"
+        />
+      )
+    }
+    return <input {...(props as React.InputHTMLAttributes<HTMLInputElement>)} />
+  },
 }
 
 // 三处 ReactMarkdown 共用配置（DRY）：remark 插件（含 remarkEntityRef）+ entity: urlTransform + 组件覆盖。
 // entityUrlTransform 必需——否则 react-markdown v10 默认会清空 entity: scheme，内联引用 href 变空。
-const MD_REMARK_PROPS: Pick<Options, 'remarkPlugins' | 'urlTransform' | 'components'> = {
-  remarkPlugins: [remarkGfm, remarkEntityRef],
+const MD_REMARK_PROPS: Pick<Options, 'remarkPlugins' | 'rehypePlugins' | 'urlTransform' | 'components'> = {
+  // remark 插件顺序（语法层 → mdast 转换）：
+  //   1. remarkGfm           — 表格 / 任务列表 / 删除线 / autolink
+  //   2. remarkMath          — $ / $$ 切成 math / inlineMath 节点（必须在其它 text-aware 插件之前，
+  //                              否则 $...$ 会被当普通文本，被 normalizePunct 处理 → 公式炸）
+  //   3. remarkEntityRef     — [scheme://x|text] → link
+  //   4. remarkNormalizePunct — 智能引号 → ASCII（只 visit 'text'，跳过 code/math）
+  //   5. remarkCodeMeta      — fence info string 透传到 hast data-meta
+  //   6. remarkCallout       — > [!NOTE] → <aside class="ke-callout-*">
+  remarkPlugins: [remarkGfm, remarkMath, remarkEntityRef, remarkNormalizePunct, remarkCodeMeta, remarkCallout],
+  // rehype 插件（mdast → hast 之后）：
+  //   1. rehypeRaw    — 解析 markdown 里嵌入的 raw HTML（如表格 cell 的 <br>）
+  //                     必须排在 rehypeKatex **前面**——math 渲染后会产生大量带 className/MathML 的节点，
+  //                     再过一次 raw 解析没意义且可能误判
+  //   2. rehypeKatex  — 把 math/inlineMath 节点用 KaTeX 渲染成带 className="katex" 的 HTML
+  rehypePlugins: [rehypeRaw, rehypeKatex],
   urlTransform: entityUrlTransform,
   components: MD_COMPONENTS,
 }
+
+// ── Markdown 容器 Tailwind 子选择器（DRY，2026-06-02 抽取）──
+// 之前三处 ReactMarkdown 各自维护一份巨长的 className，新增/修复样式得改三处。
+// 统一：父容器只管"段落、标题、列表、blockquote、行内 code/pre"；
+// table 由 MD_COMPONENTS.table 自带样式，**不**写在这里（避免外层 leading-1.7 穿透到单元格）。
+//
+// 拆两个变体：
+// - MD_PROSE_SECTION：用于 hasSections 分支（外层已经设过字号+行高+text-foreground/85），轻量
+// - MD_PROSE_STREAM：用于流式分支（无外层包装），含完整的 h1/h2/h3 + code/pre
+const MD_PROSE_SECTION =
+  '[&_p]:mb-2 [&_p:last-child]:mb-0 ' +
+  '[&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-1.5 ' +
+  '[&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5 ' +
+  '[&_li]:my-0.5 ' +
+  '[&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground ' +
+  '[&_hr]:my-4 [&_hr]:border-border'
+
+const MD_PROSE_STREAM =
+  'text-[15px] leading-[1.7] text-foreground/85 ' +
+  '[&_h1]:text-[20px] [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-2 ' +
+  '[&_h2]:text-[17px] [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 ' +
+  '[&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 ' +
+  '[&_p]:mb-2 ' +
+  '[&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[13px] ' +
+  '[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:my-2 [&_pre]:overflow-x-auto ' +
+  '[&_pre_code]:bg-transparent [&_pre_code]:p-0 ' +
+  '[&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-1.5 ' +
+  '[&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5 ' +
+  '[&_li]:my-0.5 ' +
+  '[&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground ' +
+  '[&_hr]:my-4 [&_hr]:border-border'
 
 const SECTION_ICONS: Record<string, string> = {
   overview: '📋',
@@ -160,6 +281,16 @@ export function AssistantMessage({
   const [activeEntity, setActiveEntity] = useState<string | null>(null)
   // useMemo 避免每次渲染都产生新对象导致 HighlightCtx.Provider 触发下游重渲染
   const highlightValue = useMemo(() => ({ active: activeEntity, setActive: setActiveEntity }), [activeEntity])
+
+  // ── 流式 markdown 节流（2026-06-02）──
+  // 之前 SSE 每个 token 都触发全量 ReactMarkdown reparse（remark + rehype 一整棵），
+  // 长答案（>5KB）+ 高速流（>50token/s）时 CPU 飙升、用户感觉卡。
+  // useDeferredValue 让 React 把"渲染最新值"标记为低优先级：
+  //   - 输入框打字 / 鼠标交互这些高优先级 update 先处理
+  //   - 待 idle 时再用最新的 raw_stream 跑 markdown 重渲染
+  //   - 用户感觉：高频 token 来时光标 ▌还在跳，但 markdown 内容稍微滞后一帧
+  // 不影响最终结果，只是把"中间帧"丢掉一些；体感更顺、CPU 显著降。
+  const deferredRawStream = useDeferredValue(message.raw_stream)
 
   /**
    * 触发下载：调 api 拿 blob 并把它推给浏览器另存为。
@@ -263,12 +394,7 @@ export function AssistantMessage({
                     // 普通文本：v1.10 改用 ReactMarkdown 渲染，让 fenced code block 走 CodeBlock
                     // 之前 whitespace-pre-wrap 显示原始 ```java 字符串没语法高亮
                     return (
-                      <div key={ci} className="
-                        [&_p]:mb-2 [&_p:last-child]:mb-0
-                        [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-1.5
-                        [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
-                        [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground
-                      ">
+                      <div key={ci} className={MD_PROSE_SECTION}>
                         <ReactMarkdown {...MD_REMARK_PROPS}>
                           {chunk.value}
                         </ReactMarkdown>
@@ -296,24 +422,20 @@ export function AssistantMessage({
         // v1.6 token 流 + v1.8 markdown + v1.9 JSON 折叠
         // 当 raw_stream 是 ```json fenced 输出时（LLM 在生成结构化答案），
         // 折叠 JSON wrapper，只展示 sections.content 部分
+        //
+        // 2026-06-02：渲染用 deferredRawStream（React 18 useDeferredValue），
+        // 流式高频 token 时 markdown reparse 走低优先级，CPU 不再被打满。
+        // 注意：外层条件守卫仍用 message.raw_stream（最新值），保证 streaming UI 一收到第一个
+        // token 就显示；deferredRawStream 只决定内部 markdown 渲染版本。
         (() => {
-          const sectionContents = extractSectionContents(message.raw_stream)
-          const isJsonStream = message.raw_stream.includes('```json')
+          const raw = deferredRawStream ?? ''
+          const sectionContents = extractSectionContents(raw)
+          const isJsonStream = raw.includes('```json')
 
           // ── 分支 1：流式 JSON 模式 → 折叠展示 section content ──
           if (isJsonStream) {
             return (
-              <div className="text-[15px] leading-[1.7] text-foreground/85
-                              [&_h1]:text-[20px] [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-2
-                              [&_h2]:text-[17px] [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
-                              [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1
-                              [&_p]:mb-2
-                              [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[13px]
-                              [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:my-2 [&_pre]:overflow-x-auto
-                              [&_pre_code]:bg-transparent [&_pre_code]:p-0
-                              [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-1.5
-                              [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
-                              [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
+              <div className={MD_PROSE_STREAM}>
                 {sectionContents.length === 0 ? (
                   // 还没流出第一段 content → 给个友好占位
                   <div className="text-[13px] text-muted-foreground italic">
@@ -334,20 +456,11 @@ export function AssistantMessage({
 
           // ── 分支 2：普通 markdown raw stream（如纯文本 chat）──
           return (
-            <div className="text-[15px] leading-[1.7] text-foreground/85
-                            [&_h1]:text-[20px] [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-2
-                            [&_h2]:text-[17px] [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5
-                            [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1
-                            [&_p]:mb-2
-                            [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[13px]
-                            [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:my-2 [&_pre]:overflow-x-auto
-                            [&_pre_code]:bg-transparent [&_pre_code]:p-0
-                            [&_ul]:list-disc [&_ul]:ml-5 [&_ul]:my-1.5
-                            [&_ol]:list-decimal [&_ol]:ml-5 [&_ol]:my-1.5
-                            [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground">
+            <div className={MD_PROSE_STREAM}>
               {/* v1.10: components={MD_COMPONENTS} 让代码块走 CodeBlock 语法高亮 */}
+              {/* 用 deferredRawStream（低优先级）—— 高频 token 时不阻塞 UI */}
               <ReactMarkdown {...MD_REMARK_PROPS}>
-                {message.raw_stream}
+                {raw}
               </ReactMarkdown>
               <span className="ml-0.5 animate-pulse">▌</span>
             </div>

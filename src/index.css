@@ -310,3 +310,35 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
+
+/* ── GFM Callout (admonition) 2026-06-02 ──────────────────────────────────
+   remarkCallout 插件把 `> [!NOTE]` 等转成 <aside class="ke-callout ke-callout-note">，
+   再在头部插一段 <p class="ke-callout-title"> 显示 emoji + 中文类型名。
+
+   颜色策略：每种类型设置 --callout-color 局部变量，引用现有 design token
+   （ref-accent / status-done / status-progress / destructive），dark/light
+   自动跟随主题；不硬编码任何色值。
+   背景透明度用 color-mix(in oklch, X 10%, transparent) 实现 light/dark 通用。 */
+.ke-callout {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--callout-color, var(--border));
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--callout-color, var(--muted)) 10%, transparent);
+  color: var(--foreground);
+}
+.ke-callout > :first-child { margin-top: 0; }
+.ke-callout > :last-child { margin-bottom: 0; }
+.ke-callout-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--callout-color, var(--foreground));
+  margin: 0 0 6px 0;
+}
+
+/* 五种类型 — token 复用既有 design system，dark 模式自动跟随 */
+.ke-callout-note      { --callout-color: var(--ref-accent); }
+.ke-callout-tip       { --callout-color: var(--status-done); }
+.ke-callout-important { --callout-color: var(--ref-accent); }
+.ke-callout-warning   { --callout-color: var(--status-progress); }
+.ke-callout-caution   { --callout-color: var(--destructive); }
