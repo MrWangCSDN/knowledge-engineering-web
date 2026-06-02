@@ -20,6 +20,10 @@ import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
 import { ContextWindowBar } from '@/components/chat/ContextWindowBar'
 import type { Message } from '@/types/chat'
+// 代码片段查看器抽屉：fixed 叠加层，挂在 ChatPage 最外层容器内即可
+import { CodeViewerDrawer } from '@/components/code/CodeViewerDrawer'
+// 代码片段查看器 store：用于将当前 projectId 注入到 store（openEntity 拼 URL 时需要）
+import { useCodeViewerStore } from '@/store/codeViewer'
 
 /**
  * 模块级稳定空数组 —— selector 用同一引用避免每次 re-render。
@@ -90,6 +94,15 @@ export function ChatPage() {
 
   // 是否归档（archived_at 非空 = 只读模式）
   const isArchived = archivedAt != null && archivedAt !== undefined
+
+  // ── 代码片段查看器：把当前 projectId 注入 codeViewer store ────────────────
+  // openEntity(entityId) 内部需要 projectId 才能拼接后端 API URL；
+  // 这里参照 setCurrentProject 的 effect 范式：URL projectId 变化时同步到 store。
+  const setCodeViewerProject = useCodeViewerStore(s => s.setProject)
+  useEffect(() => {
+    // projectId 有效时才写入（避免 undefined 写入 store，导致 openEntity 请求失败）
+    if (projectId) setCodeViewerProject(projectId)
+  }, [projectId, setCodeViewerProject])
 
   // URL ↔ store 同步（仅响应 URL 变化，不响应 store 内部状态变化）
   //
@@ -212,6 +225,8 @@ export function ChatPage() {
             placeholder="该对话已归档，无法继续提问"
           />
         </div>
+        {/* 代码片段查看器抽屉：fixed 叠加层，不影响页面布局，挂在根容器末尾即可 */}
+        <CodeViewerDrawer />
       </div>
     )
   }
@@ -229,6 +244,8 @@ export function ChatPage() {
             onAbort={abort}
           />
         </div>
+        {/* 代码片段查看器抽屉：即使在 empty 页也挂上，防止 projectId 设置后立刻点击时丢失 */}
+        <CodeViewerDrawer />
       </div>
     )
   }
@@ -253,6 +270,8 @@ export function ChatPage() {
           placeholder={isArchived ? '该对话已归档，无法继续提问' : '继续追问...'}
         />
       </div>
+      {/* 代码片段查看器抽屉：fixed 定位叠加层，不占 flex 布局空间，挂最外层根容器末尾 */}
+      <CodeViewerDrawer />
     </div>
   )
 }

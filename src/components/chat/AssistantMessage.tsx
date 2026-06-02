@@ -406,11 +406,13 @@ export function AssistantMessage({
                   )}
                 </div>
                 {s.references && s.references.length > 0 && (
-                  <div className="mt-2 text-[12.5px] text-muted-foreground">
+                  // section 底部引用来源列表：每个 reference 渲成可点击的 EntityChip，
+                  // 点击直接打开对应实体的代码片段查看器抽屉（不再只是纯文本 span）
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {s.references.map((r, j) => (
-                      <span key={j} className="mr-2 underline-offset-2 hover:underline cursor-pointer">
-                        {r.display_text}
-                      </span>
+                      // EntityChip：entityId 用 r.entity_id（唯一实体标识），点击 → openEntity
+                      // EntityChip 已在文件顶部 import，此处直接使用
+                      <EntityChip key={j} entityId={r.entity_id} />
                     ))}
                   </div>
                 )}
