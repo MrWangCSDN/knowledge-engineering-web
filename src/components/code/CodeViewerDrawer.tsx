@@ -1,6 +1,7 @@
 // src/components/code/CodeViewerDrawer.tsx
 // 右侧代码片段抽屉：Tab 栏（多实体）+ 主区 Monaco 片段 + callers 侧栏（反向跳转）。
 // 设计 [[代码片段查看器-设计]] §5。颜色走 token、light/dark 双达标。
+import { useRef, type PointerEvent as ReactPointerEvent } from 'react'  // useRef 存拖拽起点（不触发重渲染）；ReactPointerEvent 是 React 合成指针事件类型
 import { useCodeViewerStore } from '@/store/codeViewer'   // Zustand store：读取抽屉状态 + actions
 import { useThemeStore } from '@/store/theme'              // 全局主题 store：'light' | 'dark'
 import { MonacoSnippet } from './MonacoSnippet'            // Monaco 代码片段渲染组件
@@ -40,6 +41,8 @@ export function CodeViewerDrawer() {
   const closeTab     = useCodeViewerStore(s => s.closeTab)       // 关闭单个 tab action
   const close        = useCodeViewerStore(s => s.close)          // 收起抽屉 action
   const openEntity   = useCodeViewerStore(s => s.openEntity)     // 打开新实体 tab action（callers 跳转用）
+  const width        = useCodeViewerStore(s => s.width)          // 面板宽度（px）：分隔条拖拽调整
+  const setWidth     = useCodeViewerStore(s => s.setWidth)       // 设置面板宽度 action
 
   // useThemeStore 选择器：只订阅 theme 字段，用于传递给 MonacoSnippet
   const theme = useThemeStore(s => s.theme) as 'light' | 'dark'
@@ -51,10 +54,18 @@ export function CodeViewerDrawer() {
   const active = tabs.find(t => t.entityId === activeEntityId) ?? null
 
   return (
-    // aside：语义化侧边栏容器；fixed 定位固定在视口右侧；z-40 层级在对话层之上
-    // max-w-[640px]：最大宽度 640px，响应式不会铺满整个屏幕
-    // flex flex-col：垂直布局，顶栏 + Tab 栏 + 主区依次堆叠
-    <aside className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[640px] flex-col border-l border-border bg-background shadow-[var(--drawer-shadow)]">
+    // Fragment：返回「分隔条 + 面板」两个并排的 flex 子节点（由 AppLayout 挂在根 flex 行）
+    <>
+      {/* 分隔条：拖拽调节面板宽度（手柄在面板左侧，向左拖 = 面板变宽）*/}
+      <ResizeHandle width={width} setWidth={setWidth} />
+
+      {/* aside：停靠式代码面板，宽度由 store.width 控制（可拖拽）。
+          作为 <main> 的 flex 兄弟节点 → 主区收窄、面板并排 = 真分屏（非 fixed 浮层）。
+          shrink-0 防止被主区压缩；颜色走 token（border-border/bg-background），light/dark 双达标。 */}
+      <aside
+        style={{ width }}
+        className="flex h-full shrink-0 flex-col border-l border-border bg-background"
+      >
 
       {/* ── 顶栏：标题 + 关闭按钮 ─────────────────────────────────── */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -150,6 +161,65 @@ export function CodeViewerDrawer() {
         ) : null}
 
       </div>
-    </aside>
+      </aside>
+    </>
+  )
+}
+
+/**
+ * ResizeHandle — 分隔条，拖拽调节右侧代码面板宽度。
+ *
+ * 交互：在手柄上按下并左右拖动 → 实时 setWidth。手柄位于面板左侧，
+ * 向左拖（指针 X 变小）= 面板变宽，故 newWidth = 起始宽度 + (起始X − 当前X)。
+ *
+ * 用 Pointer Events（统一鼠标/触控）+ setPointerCapture：按下后即使指针移出手柄，
+ * move/up 仍回传到手柄，拖拽不会中断（比 mousemove 监听 window 更省心、自动随元素卸载清理）。
+ */
+function ResizeHandle({ width, setWidth }: { width: number; setWidth: (w: number) => void }) {
+  // useRef 存拖拽起点 { startX, startW }；非拖拽态为 null。用 ref 而非 state：拖拽中频繁变化不该触发重渲染
+  const drag = useRef<{ startX: number; startW: number } | null>(null)
+
+  // 按下：记录起点 + 捕获指针 + 锁定全局光标/选区
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    drag.current = { startX: e.clientX, startW: width }      // 记录起始 X 与起始宽度
+    e.currentTarget.setPointerCapture(e.pointerId)           // 捕获：后续 move/up 锁定到本元素
+    document.body.style.cursor = 'col-resize'                // 拖拽期全局光标统一为左右箭头
+    document.body.style.userSelect = 'none'                  // 禁用文本选择，避免拖拽误选 Monaco 文字
+  }
+
+  // 移动：仅在拖拽态（drag.current 非空）按位移计算新宽度
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current
+    if (!d) return                                           // 未按下：忽略移动
+    const next = d.startW + (d.startX - e.clientX)           // 向左拖 → 变宽
+    const max = window.innerWidth - 360                      // 运行时按视口再夹：主区至少留 360px，避免面板把内容挤没
+    setWidth(Math.min(next, max))                            // store.setWidth 内部还会夹 [WIDTH_MIN, WIDTH_MAX]
+  }
+
+  // 结束拖拽（抬起 / 取消）：清起点 + 还原全局光标与选区
+  const endDrag = () => {
+    drag.current = null
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  return (
+    // role/aria：无障碍语义（垂直分隔条，可调整大小）。
+    // 6px 命中区 + 居中 1px 发丝线；hover/拖拽用 --ref-accent 高亮（token，light/dark 双档，与既有 callers 链接同色系）。
+    // group 让内部发丝线能响应外层 hover。
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="拖拽调整代码面板宽度"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className="group relative w-1.5 shrink-0 cursor-col-resize bg-transparent hover:bg-[var(--ref-accent)]/20"
+    >
+      {/* 居中发丝线：默认 border 色，hover 时变 accent，给出"此处可拖拽"的视觉暗示。
+          pointer-events-none 让它不拦截指针事件（事件统一由外层 div 处理）。 */}
+      <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border group-hover:bg-[var(--ref-accent)]" />
+    </div>
   )
 }

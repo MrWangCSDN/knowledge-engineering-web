@@ -27,5 +27,7 @@ describe('CodeViewerDrawer', () => {
     render(<CodeViewerDrawer />)
     expect(screen.getByTestId('monaco')).toHaveTextContent('body')
     expect(screen.getByText(/x/)).toBeInTheDocument()
+    // 分屏分隔条（可拖拽手柄）应随面板一起渲染
+    expect(screen.getByRole('separator')).toBeInTheDocument()
   })
 })

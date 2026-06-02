@@ -24,6 +24,47 @@ interface CodeViewerState {
   switchTab: (entityId: string) => void          // 手动切换 tab
   closeTab: (entityId: string) => void           // 关闭单个 tab
   close: () => void                              // 收起抽屉（不销毁 tabs）
+  width: number                                  // 代码面板宽度（px）：可拖拽分隔条调整 + 持久化
+  setWidth: (width: number) => void              // 设置面板宽度（夹紧到 [MIN,MAX] 并写 localStorage）
+}
+
+// ── 面板宽度：常量 + 夹紧 + localStorage 持久化 ─────────────────────────────
+// 分隔条拖拽调节代码查看器宽度；持久化到 localStorage，下次打开沿用上次宽度。
+const WIDTH_MIN = 320                             // 最小宽度（px）：再窄 Monaco 不好用
+const WIDTH_MAX = 1400                            // 最大宽度（px）：绝对上限；运行时拖拽还会按视口再夹一道
+const WIDTH_DEFAULT = 560                         // 默认宽度（px）：未持久化时的初值
+const WIDTH_KEY = 'ke.codeViewer.width'           // localStorage 键名
+
+/** 把任意数值夹紧到 [WIDTH_MIN, WIDTH_MAX]；非法值（NaN/Infinity）回落默认值。 */
+function clampWidth(w: number): number {
+  // Number.isFinite 排除 NaN / Infinity（拖拽计算偶发非法值时兜底）
+  if (!Number.isFinite(w)) return WIDTH_DEFAULT
+  // Math.max(min, Math.min(max, w)) 是「夹紧」惯用法：先压上限、再托下限
+  return Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, w))
+}
+
+/** 从 localStorage 读上次保存的宽度；读不到 / 无 localStorage 时返回默认值。 */
+function loadWidth(): number {
+  // typeof window 守卫：SSR / 部分测试环境无 window，避免抛 ReferenceError
+  if (typeof window === 'undefined') return WIDTH_DEFAULT
+  // try/catch：隐私模式 / 禁用 localStorage 时 getItem 可能抛 SecurityError
+  try {
+    const raw = window.localStorage.getItem(WIDTH_KEY)   // 读字符串，可能为 null
+    // 没存过（null）直接返回默认；否则转数字后夹紧（防被篡改成非法值）
+    return raw == null ? WIDTH_DEFAULT : clampWidth(Number(raw))
+  } catch {
+    return WIDTH_DEFAULT
+  }
+}
+
+/** 把宽度写入 localStorage（best-effort，失败静默忽略）。 */
+function saveWidth(w: number): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(WIDTH_KEY, String(w))    // localStorage 只能存字符串
+  } catch {
+    // 隐私模式 / 配额满：忽略，宽度仅本次会话有效
+  }
 }
 
 // create<T>((set, get) => ({...})) 是 Zustand 的 vanilla 范式（无 immer）
@@ -34,6 +75,7 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   open: false,
   tabs: [],
   activeEntityId: null,
+  width: loadWidth(),                            // 初始宽度：读 localStorage，无则默认 560
 
   // 设置工程 id，通常由 ChatPage 在 mount 时调用
   setProject: (projectId) => set({ projectId }),
@@ -97,4 +139,11 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
 
   // 收起抽屉（tabs 保留，重新 openEntity 时可直接复用）
   close: () => set({ open: false }),
+
+  // 设置面板宽度：夹紧到 [WIDTH_MIN, WIDTH_MAX] 后更新 store + 持久化
+  setWidth: (width) => {
+    const w = clampWidth(width)                   // 夹紧（含 NaN 兜底）
+    set({ width: w })                             // 更新 store（触发订阅组件重渲染）
+    saveWidth(w)                                  // 写 localStorage，下次打开沿用
+  },
 }))
