@@ -16,4 +16,13 @@ describe('getCodeSnippet', () => {
     )
     expect(out).toBe(fake)
   })
+
+  it('projectId 含特殊字符时 path segment 被 encode', async () => {
+    const spy = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: {} } as never)
+    await getCodeSnippet('org/repo', 'A::m#()')
+    expect(spy).toHaveBeenCalledWith(
+      '/projects/org%2Frepo/code-snippet',
+      { params: { entity_id: 'A::m#()' } },
+    )
+  })
 })
