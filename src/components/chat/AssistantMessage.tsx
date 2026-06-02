@@ -228,13 +228,23 @@ interface Props {
   projectId?: string
 }
 
-// 用正则匹配 ```mermaid 代码块；`s` 标志让 . 匹配换行
-// 捕获 group 1 就是 mermaid 源码
-const MERMAID_FENCE_RE = /```mermaid\s*\n([\s\S]*?)```/g
+// 统一匹配 ```mermaid 和 ```reactflow 两种 diagram fence
+// 捕获 group 1 = 语言名（mermaid|reactflow），group 2 = fence 内源码 / JSON
+// `s` 标志让 . 匹配换行
+const DIAGRAM_FENCE_RE = /```(mermaid|reactflow)\s*\n([\s\S]*?)```/g
+
+type ContentChunk =
+  | { type: 'text'; value: string }
+  | { type: 'mermaid'; value: string }
+  // v1.11（2026-06-02）：call_chain 段为 JSON 时走 ReactFlow；data 已 parse 好
+  | { type: 'react-flow'; data: CallChainData }
 
 /**
- * 把 section.content 按 ```mermaid fence 切成段。
- * 返回数组里每条要么是 { type: 'text', value: string }，要么 { type: 'mermaid', value: string }。
+ * 把 section.content 按 ```mermaid / ```reactflow fence 切成段。
+ *
+ * v1.12（2026-06-02）：升级自 splitMermaidFences —— 同时识别两种 diagram fence：
+ *   - ```mermaid       → { type: 'mermaid', value: 源码 }（走 MermaidDiagram）
+ *   - ```reactflow     → 尝试 JSON.parse；命中 → { type: 'react-flow', data }；失败 → text
  *
  * 举例：
  *   "前文 ```mermaid\nA-->B\n``` 后文"
@@ -243,25 +253,41 @@ const MERMAID_FENCE_RE = /```mermaid\s*\n([\s\S]*?)```/g
  *     { type: 'mermaid', value: 'A-->B\n' },
  *     { type: 'text', value: ' 后文' },
  *   ]
+ *
+ *   "看图 ```reactflow\n{\"nodes\":[...]}\n``` end"
+ *   → [
+ *     { type: 'text', value: '看图 ' },
+ *     { type: 'react-flow', data: { nodes:[...], edges:[...] } },
+ *     { type: 'text', value: ' end' },
+ *   ]
  */
-type ContentChunk =
-  | { type: 'text'; value: string }
-  | { type: 'mermaid'; value: string }
-  // v1.11（2026-06-02）：call_chain 段为 JSON 时走 ReactFlow；data 已 parse 好
-  | { type: 'react-flow'; data: CallChainData }
-
-function splitMermaidFences(content: string): ContentChunk[] {
+function splitDiagramFences(content: string): ContentChunk[] {
   const chunks: ContentChunk[] = []
   let lastIndex = 0
   // 把全局正则重置一下（exec 是有状态的）
-  MERMAID_FENCE_RE.lastIndex = 0
+  DIAGRAM_FENCE_RE.lastIndex = 0
   let match: RegExpExecArray | null
-  while ((match = MERMAID_FENCE_RE.exec(content)) !== null) {
-    // 把上一段非 mermaid 文字塞进去（如果有）
+  while ((match = DIAGRAM_FENCE_RE.exec(content)) !== null) {
+    // 把上一段非 fence 文字塞进去（如果有）
     if (match.index > lastIndex) {
       chunks.push({ type: 'text', value: content.slice(lastIndex, match.index) })
     }
-    chunks.push({ type: 'mermaid', value: match[1] })
+    const lang = match[1] // 'mermaid' | 'reactflow'
+    const fenceContent = match[2]
+    if (lang === 'reactflow') {
+      // reactflow fence 内必须是合法 CallChainData JSON；交给 tryParseCallChain 校验
+      // 失败时退化为 text 显示原 fence 内容（不静默丢失，方便用户/开发调试）
+      const parsed = tryParseCallChain(fenceContent)
+      if (parsed) {
+        chunks.push({ type: 'react-flow', data: parsed })
+      } else {
+        // 把整段 fence 还原成 text（让 ReactMarkdown 当 unknown lang 的代码块渲染）
+        chunks.push({ type: 'text', value: '```reactflow\n' + fenceContent + '```' })
+      }
+    } else {
+      // mermaid 直接塞源码，走 MermaidDiagram（sanitizeMermaid 内部会清洗）
+      chunks.push({ type: 'mermaid', value: fenceContent })
+    }
     lastIndex = match.index + match[0].length
   }
   // 收尾：把尾巴的文字塞进去
@@ -367,21 +393,23 @@ export function AssistantMessage({
             const headerless = s.type === 'chit-chat' || sections.length === 1
             const icon = SECTION_ICONS[s.type] ?? '📌'
             const title = s.title || SECTION_TITLES[s.type] || s.type
-            // 只对 call_chain 段做"特殊渲染"分流；其他段直接当文本（更快、避免误判）
-            // v1.11（2026-06-02）三层分流（优先级递降）：
-            //   1. content 是 ReactFlow JSON  → CallChainData → 走 CallChainFlow（新）
-            //   2. content 含 ```mermaid fence → 切出 mermaid 段，每段走 MermaidDiagram（老）
-            //   3. 都不是                     → 纯 markdown 文本
-            // 决策见 [[首页设计]] §14 ReAct 落地日志、[[Mermaid-渲染稳定性-设计]] §6 Path B
+            // v1.12（2026-06-02）：图渲染分流不再限定 call_chain 段，所有段都跑
+            //   1. call_chain 段：整段 content 约定就是 ReactFlow JSON（结构化 6 段答案）
+            //   2. 任何段（含 chit-chat / overview / agent 自由格式）：fence 切片
+            //      - ```reactflow JSON → CallChainFlow
+            //      - ```mermaid 源码   → MermaidDiagram
+            //      - 其余文字            → markdown
+            // 之所以放开：chat / agent 路径输出单段 chit-chat 含 ```mermaid，
+            // 旧逻辑 s.type !== 'call_chain' 直接走 text → CodeBlock 显示源码而非图。
+            // 决策见 [[Mermaid-渲染稳定性-设计]] §7 全段图分流
             const chunks: ContentChunk[] = (() => {
-              if (s.type !== 'call_chain') {
-                return [{ type: 'text', value: s.content || '' }]
+              // (a) call_chain 段优先尝试整段 JSON（结构化路径约定 content 就是 JSON 字符串）
+              if (s.type === 'call_chain') {
+                const parsedWhole = tryParseCallChain(s.content || '')
+                if (parsedWhole) return [{ type: 'react-flow', data: parsedWhole }]
               }
-              // 先尝试 JSON 解析（新数据通路）
-              const parsed = tryParseCallChain(s.content || '')
-              if (parsed) return [{ type: 'react-flow', data: parsed }]
-              // 兜底：仍按 mermaid fence 切（兼容老对话历史 + LLM 偶尔吐 mermaid）
-              return splitMermaidFences(s.content || '')
+              // (b) 其它情况一律走 fence 切片（含 reactflow / mermaid 两种 fence）
+              return splitDiagramFences(s.content || '')
             })()
             return (
               <div key={i}>

@@ -214,6 +214,31 @@ const MOCK_MESSAGE: Message = {
       title: '调用链路（ReactFlow 演示）',
       content: JSON.stringify(CALL_CHAIN_SAMPLE),
     },
+    // v1.12（2026-06-02）：chat 路径模拟 —— 非 call_chain 段含 ```reactflow JSON fence
+    // 验证 splitDiagramFences 能识别并渲染 ReactFlow 图
+    // 这模拟用户在 chat 里追问"用流程图展示出来"时，LLM 自由格式答案内嵌图
+    {
+      type: 'overview',
+      title: 'Chat 路径 ReactFlow fence 演示',
+      content:
+        '下面是 mall-swarm 退货流程图（chat 自由格式答案中嵌入 ```reactflow JSON）：\n\n' +
+        '```reactflow\n' +
+        JSON.stringify({
+          nodes: [
+            { id: 'a1', label: '用户点击申请退货', kind: 'external' },
+            { id: 'a2', label: 'create', kind: 'controller', classOf: 'OmsPortalOrderReturnApplyController' },
+            { id: 'a3', label: 'create', kind: 'service', classOf: 'OmsPortalOrderReturnApplyService' },
+            { id: 'a4', label: 'insert', kind: 'mapper', classOf: 'OmsOrderReturnApplyMapper' },
+          ],
+          edges: [
+            { from: 'a1', to: 'a2', label: '提交退货申请' },
+            { from: 'a2', to: 'a3', label: '校验 + 保存' },
+            { from: 'a3', to: 'a4', label: '插入退货记录' },
+          ],
+        }, null, 2) +
+        '\n```\n\n' +
+        '上面的图通过 ` ```reactflow ` fenced JSON 在 overview 段里渲染，验证 v1.12 全段 fence 识别。',
+    },
   ],
   created_at: '2026-06-02T00:00:00.000Z',
 }
