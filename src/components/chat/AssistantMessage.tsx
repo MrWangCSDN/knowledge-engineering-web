@@ -33,13 +33,18 @@ import { remarkCallout } from './remarkCallout'
 import { EntityRef, EntityChip } from './EntityRef'
 import { HighlightCtx } from './HighlightCtx'
 
-import type { Message } from '@/types/chat'
+import type { Message, CallChainData } from '@/types/chat'
+import { tryParseCallChain } from '@/types/chat'
 import { exportMessageAsDocx } from '@/api/sessions'
 // v1.9.1：MermaidDiagram lazy load —— mermaid 库 ~250KB，
 // 登录页 / 设置页 / 影响分析页都不需要；只在 chat 答案含 ```mermaid 时才下载
 const MermaidDiagram = lazy(() =>
   import('./MermaidDiagram').then(m => ({ default: m.MermaidDiagram })),
 )
+// v1.11（2026-06-02）：CallChainFlow 直接 import（暂不 lazy）
+// 临时排查：React 19 + lazy + @xyflow/react 组合下出现 Invalid hook call；
+// 直接 import 跑通后再回头开 lazy
+import { CallChainFlow } from './CallChainFlow'
 import { ToolCallCard } from './ToolCallCard'
 import { ThinkingBlock } from './ThinkingBlock'
 import { TodoList } from './TodoList'
@@ -239,7 +244,11 @@ const MERMAID_FENCE_RE = /```mermaid\s*\n([\s\S]*?)```/g
  *     { type: 'text', value: ' 后文' },
  *   ]
  */
-type ContentChunk = { type: 'text'; value: string } | { type: 'mermaid'; value: string }
+type ContentChunk =
+  | { type: 'text'; value: string }
+  | { type: 'mermaid'; value: string }
+  // v1.11（2026-06-02）：call_chain 段为 JSON 时走 ReactFlow；data 已 parse 好
+  | { type: 'react-flow'; data: CallChainData }
 
 function splitMermaidFences(content: string): ContentChunk[] {
   const chunks: ContentChunk[] = []
@@ -358,12 +367,22 @@ export function AssistantMessage({
             const headerless = s.type === 'chit-chat' || sections.length === 1
             const icon = SECTION_ICONS[s.type] ?? '📌'
             const title = s.title || SECTION_TITLES[s.type] || s.type
-            // 只对 call_chain 段拆 mermaid；其他段直接当文本（更快、避免误判）
-            // 决策见 [[首页设计]] §14 ReAct 落地日志
-            const chunks =
-              s.type === 'call_chain'
-                ? splitMermaidFences(s.content || '')
-                : [{ type: 'text' as const, value: s.content || '' }]
+            // 只对 call_chain 段做"特殊渲染"分流；其他段直接当文本（更快、避免误判）
+            // v1.11（2026-06-02）三层分流（优先级递降）：
+            //   1. content 是 ReactFlow JSON  → CallChainData → 走 CallChainFlow（新）
+            //   2. content 含 ```mermaid fence → 切出 mermaid 段，每段走 MermaidDiagram（老）
+            //   3. 都不是                     → 纯 markdown 文本
+            // 决策见 [[首页设计]] §14 ReAct 落地日志、[[Mermaid-渲染稳定性-设计]] §6 Path B
+            const chunks: ContentChunk[] = (() => {
+              if (s.type !== 'call_chain') {
+                return [{ type: 'text', value: s.content || '' }]
+              }
+              // 先尝试 JSON 解析（新数据通路）
+              const parsed = tryParseCallChain(s.content || '')
+              if (parsed) return [{ type: 'react-flow', data: parsed }]
+              // 兜底：仍按 mermaid fence 切（兼容老对话历史 + LLM 偶尔吐 mermaid）
+              return splitMermaidFences(s.content || '')
+            })()
             return (
               <div key={i}>
                 {/* v1.2: chit-chat / 单段自由格式跳过 h3 header */}
@@ -374,6 +393,10 @@ export function AssistantMessage({
                 )}
                 <div className="text-foreground/85">
                   {chunks.map((chunk, ci) => {
+                    if (chunk.type === 'react-flow') {
+                      // v1.11：ReactFlow 渲染调用图
+                      return <CallChainFlow key={ci} data={chunk.data} theme={theme} />
+                    }
                     if (chunk.type === 'mermaid') {
                       // 渲染 Mermaid 图；传 theme 让它切 light/dark
                       // v1.9.1：lazy 加载 MermaidDiagram；首次渲染时下载 mermaid 库

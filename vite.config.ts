@@ -10,6 +10,14 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // 2026-06-02：强制 react / react-dom 单实例 —— @xyflow/react 嵌套了 zustand@4，
+    // 在 React 19 下 Vite 默认 module 解析会让 nested deps 拿到第二份 React binding
+    // → "Invalid hook call" + edges/minimap 不渲染。dedupe 让它们指向顶层同一份 React
+    dedupe: ['react', 'react-dom'],
+  },
+  // 2026-06-02：把 @xyflow/react 显式预打包，避免开发态 nested zustand 走 Vite 模块隔离
+  optimizeDeps: {
+    include: ['@xyflow/react'],
   },
   server: {
     port: 5173,

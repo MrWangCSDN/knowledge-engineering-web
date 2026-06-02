@@ -48,9 +48,113 @@ export interface Section {
   type: SectionType
   /** 中文标题，如 '业务概述'。 */
   title: string
-  /** markdown 内容；可能含 [entity_id|text] 标记。 */
+  /**
+   * markdown 内容；可能含 [entity_id|text] 标记。
+   *
+   * 例外（2026-06-02）：当 type === 'call_chain' 时，content 约定为
+   * `JSON.stringify(CallChainData)` —— 前端会先尝试 `tryParseCallChain()`，
+   * 命中 JSON → 渲染为 ReactFlow 调用图（CallChainFlow）；
+   * 不命中（兼容老数据/降级文本）→ 走原 markdown / mermaid 渲染。
+   */
   content: string
   references?: Reference[]
+}
+
+// ─── call_chain 段的 ReactFlow 数据结构（v1.11 接 ReactFlow，2026-06-02）─────
+
+/**
+ * 调用图节点 —— 后端 _build_call_chain 产出 / LLM 直接吐
+ *
+ * 设计上 label 是显示文本（如方法短名），其它字段是元数据用于：
+ *   - kind: 节点配色 + 图标（Controller=蓝 / Service=绿 / Mapper=橙 / Method=灰）
+ *   - classOf + sig: 用于 hover 提示完整签名
+ *   - filePath + lineNumber: 用于点击跳源码（复用现有 EntityRef 跳转逻辑）
+ *   - entityId: 用于挂到 ke://method:... 让 EntityRef 拦截器接管
+ */
+export interface CallChainNode {
+  /** 图内唯一 id（用于 edge 引用），建议 'n1' / 'n2' 等短串 */
+  id: string
+  /** 节点显示文本 —— 用户在图上看到的字（方法短名 / 业务说明） */
+  label: string
+  /** 节点角色，决定配色 / 图标；后端可不填，前端默认 'method' */
+  kind?: 'controller' | 'service' | 'mapper' | 'method' | 'external'
+  /** 类全限定名（如 'com.foo.UserController'），hover 时显示 */
+  classOf?: string
+  /** 方法签名（如 '(Long, String)'），hover 时拼接显示 */
+  sig?: string
+  /** 源码相对路径，用于跳转 */
+  filePath?: string
+  /** 行号 */
+  lineNumber?: number
+  /** entity_id（含 scheme），让点击节点能复用 EntityRef 跳转链路 */
+  entityId?: string
+}
+
+/**
+ * 调用图边 —— from/to 引用 CallChainNode.id
+ * label 是边上业务说明文字（如"触发订单收货确认"）
+ */
+export interface CallChainEdge {
+  from: string
+  to: string
+  /** 边上显示的中文业务动作；可选 */
+  label?: string
+}
+
+/** 整张调用图 = nodes + edges */
+export interface CallChainData {
+  nodes: CallChainNode[]
+  edges: CallChainEdge[]
+}
+
+/**
+ * 尝试把 content 字符串解析为 CallChainData。
+ *
+ * 解析失败（非 JSON / schema 不符）返回 null，调用方负责走 fallback。
+ *
+ * 容错点：
+ *   - content 前后可能有空白
+ *   - 后端可能用 ```json fence 包了一层，剥掉
+ *   - nodes/edges 必须是数组才算合法
+ *
+ * @param content section.content 原文
+ * @returns CallChainData | null
+ */
+export function tryParseCallChain(content: string): CallChainData | null {
+  // 边界：空内容直接 null
+  if (!content) return null
+
+  // 1. 剥可能的 markdown fence 包装：```json\n{...}\n```
+  let candidate = content.trim()
+  if (candidate.startsWith('```')) {
+    // 找第一个换行后到最后一个 ``` 之间的内容
+    const firstNewline = candidate.indexOf('\n')
+    const lastFence = candidate.lastIndexOf('```')
+    if (firstNewline > 0 && lastFence > firstNewline) {
+      candidate = candidate.slice(firstNewline + 1, lastFence).trim()
+    }
+  }
+
+  // 2. 必须以 `{` 开头才尝试 parse —— 节省 try/catch 开销 + 避免误识别
+  if (!candidate.startsWith('{')) return null
+
+  try {
+    const data = JSON.parse(candidate)
+    // 3. schema 校验：必须含 nodes / edges 数组
+    if (!data || typeof data !== 'object') return null
+    if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) return null
+    // 4. 节点至少要有 id 字段（label 可空）
+    if (data.nodes.some((n: unknown) => !n || typeof (n as CallChainNode).id !== 'string')) return null
+    // 5. 边至少要有 from/to 字段
+    if (data.edges.some((e: unknown) => {
+      const ed = e as CallChainEdge
+      return !ed || typeof ed.from !== 'string' || typeof ed.to !== 'string'
+    })) return null
+    return data as CallChainData
+  } catch {
+    // JSON 不合法 → null，调用方走旧 mermaid / markdown 路径
+    return null
+  }
 }
 
 // ─── 消息 metadata ──────────────────────────────────────────────────────────

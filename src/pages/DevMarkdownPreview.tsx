@@ -20,8 +20,8 @@
  */
 // AssistantMessage 是 named export，DevMarkdownPreview 自己也用 named export 与项目其他页保持一致
 import { AssistantMessage } from '@/components/chat/AssistantMessage'
-// Message / Section 类型从 types/chat 取
-import type { Message } from '@/types/chat'
+// Message / Section / CallChainData 类型从 types/chat 取
+import type { Message, CallChainData } from '@/types/chat'
 
 // 一段塞满 GFM 特性的样例 markdown
 // 用模板字符串方便保留多行结构；反引号代码块在模板字符串里要用 \` 转义
@@ -143,6 +143,57 @@ print("hello")  # 这里的引号保持原样
 收尾。
 `
 
+// ── v1.11（2026-06-02）：ReactFlow 调用图样本 ────────────────────────────
+// 取自用户实际遇到的 mall-swarm "订单状态流转" 调用链截图，扩展几条边演示分支结构
+// 节点 kind 分布：controller(蓝) / service(绿) / mapper(橙)，让 ReactFlow 配色全覆盖
+const CALL_CHAIN_SAMPLE: CallChainData = {
+  nodes: [
+    {
+      id: 'n1', label: 'confirmReceiveOrder', kind: 'controller',
+      classOf: 'OmsPortalOrderController', sig: '(Long)',
+      filePath: 'src/main/java/.../OmsPortalOrderController.java',
+      entityId: 'method://com.macro.mall.portal.controller.OmsPortalOrderController#confirmReceiveOrder',
+    },
+    {
+      id: 'n2', label: 'confirmReceiveOrder', kind: 'service',
+      classOf: 'OmsPortalOrderService', sig: '(Long)',
+    },
+    {
+      id: 'n3', label: 'create', kind: 'controller',
+      classOf: 'OmsPortalOrderReturnApplyController', sig: '(OmsOrderReturnApplyParam)',
+    },
+    {
+      id: 'n4', label: 'create', kind: 'service',
+      classOf: 'OmsPortalOrderReturnApplyService', sig: '(OmsOrderReturnApplyParam)',
+    },
+    {
+      id: 'n5', label: 'updateStatus', kind: 'controller',
+      classOf: 'OmsOrderReturnApplyController', sig: '(Long, OmsUpdateStatusParam)',
+    },
+    {
+      id: 'n6', label: 'updateStatus', kind: 'service',
+      classOf: 'OmsOrderReturnApplyService', sig: '(Long, OmsUpdateStatusParam)',
+    },
+    {
+      id: 'n7', label: 'updateByPrimaryKey', kind: 'mapper',
+      classOf: 'OmsOrderReturnApplyMapper',
+    },
+    {
+      id: 'n8', label: '通知用户', kind: 'external',
+      classOf: '消息推送服务',
+    },
+  ],
+  edges: [
+    { from: 'n1', to: 'n2', label: '触发收货确认' },
+    { from: 'n2', to: 'n3', label: '收货后允许退货' },
+    { from: 'n3', to: 'n4', label: '提交退货申请' },
+    { from: 'n4', to: 'n7', label: '插入退货记录' },
+    { from: 'n5', to: 'n6', label: '管理员更新状态' },
+    { from: 'n6', to: 'n7', label: '更新退货状态' },
+    { from: 'n6', to: 'n8', label: '通知用户结果' },
+  ],
+}
+
 // 默认 message 对象 — 模拟一条已完成的 assistant 消息
 // 只填必需字段（id / session_id / role / content / sections / created_at），其余可选字段不传
 const MOCK_MESSAGE: Message = {
@@ -155,6 +206,13 @@ const MOCK_MESSAGE: Message = {
       type: 'overview',
       title: 'Markdown 渲染验证',
       content: SAMPLE_MD,
+    },
+    // v1.11：call_chain 段 content 是 JSON 字符串 → 前端 tryParseCallChain
+    // 命中 → 走 ReactFlow（CallChainFlow 组件）
+    {
+      type: 'call_chain',
+      title: '调用链路（ReactFlow 演示）',
+      content: JSON.stringify(CALL_CHAIN_SAMPLE),
     },
   ],
   created_at: '2026-06-02T00:00:00.000Z',
