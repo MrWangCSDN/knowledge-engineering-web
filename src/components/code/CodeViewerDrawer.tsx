@@ -116,6 +116,37 @@ export function CodeViewerDrawer() {
         ))}
       </div>
 
+      {/* ── Status bar（v1.13）：文件路径 + 行号范围 + 大文件提示 ──────────── */}
+      {/* 整文件视图时显示 "src/.../X.java · Line 45-52 (create)"，让用户知道当前定位 */}
+      {/* 超大文件（file_content=null + file_size_bytes>0）显示告警，提示"仅方法片段" */}
+      {active?.snippet && (
+        <div className="flex items-center gap-1.5 border-b border-border bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground">
+          {/* 文件相对路径；truncate 让长路径省略号；hover title 看完整 */}
+          <span className="truncate font-mono" title={active.snippet.file_path}>
+            {active.snippet.file_path}
+          </span>
+          <span className="shrink-0 opacity-60">·</span>
+          {/* 行号范围 —— 用 en-dash – 视觉对齐 */}
+          <span className="shrink-0">
+            Line {active.snippet.start_line}–{active.snippet.end_line}
+          </span>
+          <span className="shrink-0 opacity-60">·</span>
+          {/* 方法短名（与 Tab 同款 shortName 算法）*/}
+          <span className="shrink-0 font-medium text-foreground/70">
+            {shortName(active.snippet.entity_id)}
+          </span>
+          {/* 超大文件回退提示：file_content 为 null 但 file_size_bytes 真实 → 走方法片段了 */}
+          {!active.snippet.file_content && active.snippet.file_size_bytes > 0 && (
+            <>
+              <span className="shrink-0 opacity-60">·</span>
+              <span className="shrink-0 text-[var(--status-progress)]">
+                文件 {Math.round(active.snippet.file_size_bytes / 1024)} KB，仅显示方法片段
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── 主区：Monaco 片段（flex-1 撑满）+ callers 侧栏（条件渲染）── */}
       {/* min-h-0 重要：flex 子元素默认 min-height: auto，不加此类高度无法正确收缩 */}
       <div className="flex min-h-0 flex-1">

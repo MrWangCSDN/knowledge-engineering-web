@@ -361,3 +361,19 @@ body {
   background: color-mix(in oklch, var(--ref-accent) 12%, transparent);
   cursor: pointer;
 }
+
+/* ── v1.13 代码片段查看器：整文件视图的"当前方法"高亮 ─────────────────────────
+   后端返回 file_content 时前端 Monaco 加载整文件，
+   用这两个类高亮 start_line~end_line 这段范围 + 左侧加 marker 竖条，
+   让用户一眼看到"当前在哪个方法"。
+   颜色走 --ref-accent token；dark 自动跟随 dark 提亮版本，不硬编码 hex */
+.cs-method-highlight {
+  /* 半透明背景，比 cs-callee-line 更淡，不抢方法体代码视觉 */
+  background: color-mix(in oklch, var(--ref-accent) 7%, transparent);
+}
+.cs-method-marker {
+  /* 左侧 3px 竖条 marker —— Monaco 的 linesDecorationsClassName 应用在行号左侧
+     用 border-left 不用 background 防止把行号列染色 */
+  border-left: 3px solid var(--ref-accent);
+  margin-left: 2px;
+}
