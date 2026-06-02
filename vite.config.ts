@@ -13,11 +13,24 @@ export default defineConfig({
     // 2026-06-02：强制 react / react-dom 单实例 —— @xyflow/react 嵌套了 zustand@4，
     // 在 React 19 下 Vite 默认 module 解析会让 nested deps 拿到第二份 React binding
     // → "Invalid hook call" + edges/minimap 不渲染。dedupe 让它们指向顶层同一份 React
-    dedupe: ['react', 'react-dom'],
+    // zustand 也 dedupe：@xyflow/react 内嵌 zustand@4，强制全应用单实例，避免多份 create 绑定
+    dedupe: ['react', 'react-dom', 'zustand'],
   },
   // 2026-06-02：把 @xyflow/react 显式预打包，避免开发态 nested zustand 走 Vite 模块隔离
   optimizeDeps: {
     include: ['@xyflow/react'],
+  },
+  // 2026-06-02 修生产白屏：把 zustand 切成纯 vendor chunk（无应用代码 → 无循环 → 必先初始化）。
+  // 否则代码片段查看器新增的 store 扰动 chunk 图后，某 store chunk 会在 zustand chunk 之前执行 →
+  // 顶层 create() 时 create 仍 undefined → "create is not a function" 整页白屏（含登录页）。
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/zustand')) return 'vendor-zustand'
+        },
+      },
+    },
   },
   server: {
     port: 5173,
