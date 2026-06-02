@@ -59,19 +59,26 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
   const accent = KIND_COLOR[kind]
   const icon = KIND_ICON[kind]
 
-  // hover 提示完整签名：classOf + label + sig
+  // hover 完整提示（title 属性 → 浏览器原生 tooltip）
   // 例：com.foo.UserController.createUser(Long, String)
+  // 节点本身只显示精简的 label，完整路径交给 tooltip
   const titleHint = [data.classOf, data.label].filter(Boolean).join('.') + (data.sig ?? '')
+
+  // 2026-06-02 美化：把 sig 与 label 拼到同一行单行展示，节点高度从 ~56px 降到 ~36px
+  // 视觉密度跟 ChatGPT / Linear 工作流图对齐
+  const displayLabel = data.label + (data.sig ?? '')
 
   return (
     <div
       // 节点容器：圆角 + 阴影 + 左侧 3px accent 竖条（按 kind 着色）
       // selected 状态加 ring 边框（ReactFlow 自带 outline 不够明显）
+      // 美化（2026-06-02）：min-w 略增到 200，max-w 收紧到 260（跟 dagre NODE_WIDTH 对齐）；
+      // hover 阴影更显眼，shadow-sm → shadow，hover:shadow-md → hover:shadow-lg
       className={`
-        relative min-w-[180px] max-w-[280px]
-        rounded-lg border border-border bg-card
-        shadow-sm hover:shadow-md transition-shadow
-        ${selected ? 'ring-2 ring-[var(--ref-accent)]' : ''}
+        relative min-w-[200px] max-w-[260px]
+        rounded-md border border-border bg-card
+        shadow hover:shadow-lg transition-all duration-150
+        ${selected ? 'ring-2 ring-[var(--ref-accent)] ring-offset-1' : ''}
       `}
       // 左侧 3px 竖条：用 box-shadow inset 实现，节省一层 DOM
       style={{ boxShadow: `inset 3px 0 0 0 ${accent}` }}
@@ -84,33 +91,22 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
 
-      {/* 节点内容区 */}
-      <div className="px-3 py-2">
-        {/* 第一行：图标 + 主标签 */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[12px] shrink-0" aria-hidden>{icon}</span>
-          {/* label 用 EntityRef 套上（如果有 entityId），实现点击跳源码 */}
-          {/* 没有 entityId 时退化为普通文本 */}
-          {data.entityId ? (
-            <EntityRef entityId={data.entityId}>
-              <span className="font-mono text-[12.5px] text-foreground truncate">
-                {data.label}
-              </span>
-            </EntityRef>
-          ) : (
+      {/* 节点内容区 —— 紧凑单行：icon + label(含sig) */}
+      {/* 2026-06-02：py-2 → py-1.5；省掉 classOf 第二行（hover tooltip 显示完整路径） */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5">
+        <span className="text-[12px] shrink-0" aria-hidden>{icon}</span>
+        {/* label + sig 拼一起显示；超长 truncate 加 ... */}
+        {/* 用 EntityRef 套上（如果有 entityId），实现点击跳源码 */}
+        {data.entityId ? (
+          <EntityRef entityId={data.entityId}>
             <span className="font-mono text-[12.5px] text-foreground truncate">
-              {data.label}
+              {displayLabel}
             </span>
-          )}
-        </div>
-
-        {/* 第二行（可选）：类全限定名 + 签名 —— 灰小字 */}
-        {/* 用 line-clamp-1 保证一行不超过节点宽度 */}
-        {(data.classOf || data.sig) && (
-          <div className="mt-0.5 text-[10.5px] text-muted-foreground font-mono truncate">
-            {data.classOf}
-            {data.sig && <span className="opacity-80">{data.sig}</span>}
-          </div>
+          </EntityRef>
+        ) : (
+          <span className="font-mono text-[12.5px] text-foreground truncate">
+            {displayLabel}
+          </span>
         )}
       </div>
     </div>

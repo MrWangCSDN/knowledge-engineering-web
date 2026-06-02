@@ -54,8 +54,10 @@ const NODE_TYPES: NodeTypes = { method: MethodNode }
 
 // dagre 算布局时给每个节点的预估尺寸 —— 实际渲染时节点 minWidth/maxWidth 在
 // MethodNode 里控制；dagre 只用这个估算 ranksep / nodesep 间距
-const NODE_WIDTH = 220
-const NODE_HEIGHT = 56
+// 2026-06-02 美化：尺寸往实际渲染最大宽度（max-w-[280]）+ 含 classOf hover tooltip 简化后
+// 的真实高度（~44px）对齐，让 dagre 算出来的间距视觉舒展不挤压
+const NODE_WIDTH = 260
+const NODE_HEIGHT = 48
 
 /**
  * 用 dagre 算 LR (Left-to-Right) 布局，返回带 position 的 ReactFlow 节点。
@@ -74,12 +76,17 @@ function layoutWithDagre(
   // dagre.graphlib.Graph：核心数据结构
   const g = new dagre.graphlib.Graph()
   // setGraph：图级配置 —— rankdir 方向、间距
+  // 2026-06-02 第二轮美化（反思）：ranksep 不能一味加大！
+  // LR 布局下 8 节点 × (NODE_WIDTH + ranksep) 总宽 → fitView 等比缩到容器宽 →
+  // 缩放比降到 ~30% → 字号变 4px 看不清。
+  // 改策略：ranksep / nodesep 保持紧凑，让总图小；
+  // 配合 maxZoom 放开（ReactFlow 设 3），fitView 能把"小图放大"到节点尺寸接近原始
   g.setGraph({
     rankdir,
-    ranksep: 80,   // 同向相邻 rank 之间的距离
-    nodesep: 30,   // 同 rank 内节点间距
-    marginx: 20,
-    marginy: 20,
+    ranksep: 90,   // 同向 rank 之间 —— 给边 + label 够位但不爆图宽
+    nodesep: 36,   // 同 rank 内节点间距
+    marginx: 24,
+    marginy: 24,
   })
   // dagre 要求设默认 edge label 工厂（即使我们不用 label）
   g.setDefaultEdgeLabel(() => ({}))
@@ -158,11 +165,14 @@ function CallChainFlowInner({ data, theme = 'light' }: Props) {
       // 边末端加三角箭头；箭头颜色和边一致
       markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--muted-foreground)' },
       // 边线颜色 + 宽度 —— 走 design token；label 字体 + 背景框
-      style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 },
-      labelStyle: { fontSize: 11, fontFamily: 'inherit', fill: 'var(--foreground)' },
-      labelBgStyle: { fill: 'var(--background)' },
-      labelBgPadding: [4, 2] as [number, number],
-      labelBgBorderRadius: 4,
+      // 2026-06-02 美化：label padding 加厚 (4,2)→(8,4) 防文字贴边；
+      // background 改成 card 色，对比度比 background 更清晰；
+      // 边线 strokeWidth 1.5 → 1.2 更细更优雅
+      style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.2 },
+      labelStyle: { fontSize: 11, fontFamily: 'inherit', fill: 'var(--foreground)', fontWeight: 500 },
+      labelBgStyle: { fill: 'var(--card)', stroke: 'var(--border)', strokeWidth: 0.5 },
+      labelBgPadding: [8, 4] as [number, number],
+      labelBgBorderRadius: 6,
     }))
 
     // 3. dagre 重排
@@ -227,9 +237,11 @@ function CallChainFlowInner({ data, theme = 'light' }: Props) {
       className={
         // 全屏：fixed 覆盖整个 viewport + 顶层 z-index + 黑底加深
         // 非全屏：内联 + 默认高度 + 边框
+        // 2026-06-02 美化：高度 420 → 460；LR 布局图本身扁，加高也帮助有限，
+        // 真正放大节点靠 maxZoom + 紧凑 ranksep（fitView 把小图自动放大到节点接近原始尺寸）
         fullscreen
           ? 'fixed inset-0 z-50 bg-background'
-          : 'relative my-3 h-[420px] rounded-lg border border-border bg-card overflow-hidden'
+          : 'relative my-3 h-[460px] rounded-lg border border-border bg-card overflow-hidden'
       }
     >
       {/* 工具栏（右上悬浮，hover 显示）*/}
@@ -274,7 +286,9 @@ function CallChainFlowInner({ data, theme = 'light' }: Props) {
         colorMode={theme}
         // 自动 fit 进 viewport（首屏铺满）
         fitView
-        fitViewOptions={{ padding: 0.1 }}
+        // 美化（2026-06-02 第二轮）：padding 0.15 → 0.08 让节点占更多面积；
+        // 关键：放开 maxZoom 让"小图自动放大"超过 1.0 → 节点视觉接近原始尺寸
+        fitViewOptions={{ padding: 0.08, maxZoom: 2.5 }}
         // 双击不让聚焦节点（避免误触）
         nodesFocusable={false}
         // 禁用键盘 delete / backspace（KE 是只读视图）
@@ -282,9 +296,9 @@ function CallChainFlowInner({ data, theme = 'light' }: Props) {
         // 鼠标滚轮缩放 + 拖拽平移；都是默认开启，这里显式列让可读
         zoomOnScroll
         panOnDrag
-        // 缩放上下限：避免缩太小看不见节点 / 缩太大像素糊
-        minZoom={0.2}
-        maxZoom={2}
+        // 缩放上下限：minZoom 看清节点的最低限；maxZoom 提到 3 让 fitView 能放大小图
+        minZoom={0.3}
+        maxZoom={3}
         proOptions={{ hideAttribution: true }}
       >
         {/* 背景：点阵网格；颜色走 design token */}
