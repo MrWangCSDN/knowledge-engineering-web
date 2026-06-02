@@ -342,3 +342,16 @@ body {
 .ke-callout-important { --callout-color: var(--ref-accent); }
 .ke-callout-warning   { --callout-color: var(--status-progress); }
 .ke-callout-caution   { --callout-color: var(--destructive); }
+
+/* 代码片段查看器：调用点可点击装饰（下划线 + 手型）。颜色走 --ref-accent（已 light/dark 双档）。 */
+.cs-callee {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  color: var(--ref-accent);
+}
+.cs-callee-line {
+  background: color-mix(in oklch, var(--ref-accent) 12%, transparent);
+  cursor: pointer;
+}
