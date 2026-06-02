@@ -13,6 +13,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-query": "^5.100.9",
     "axios": "^1.16.0",
     "class-variance-authority": "^0.7.1",
