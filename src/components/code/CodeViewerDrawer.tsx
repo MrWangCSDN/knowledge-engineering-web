@@ -54,7 +54,7 @@ export function CodeViewerDrawer() {
     // aside：语义化侧边栏容器；fixed 定位固定在视口右侧；z-40 层级在对话层之上
     // max-w-[640px]：最大宽度 640px，响应式不会铺满整个屏幕
     // flex flex-col：垂直布局，顶栏 + Tab 栏 + 主区依次堆叠
-    <aside className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[640px] flex-col border-l border-border bg-background shadow-xl">
+    <aside className="fixed right-0 top-0 z-40 flex h-full w-full max-w-[640px] flex-col border-l border-border bg-background shadow-[var(--drawer-shadow)]">
 
       {/* ── 顶栏：标题 + 关闭按钮 ─────────────────────────────────── */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
