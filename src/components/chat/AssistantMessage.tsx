@@ -412,7 +412,7 @@ export function AssistantMessage({
                     {s.references.map((r, j) => (
                       // EntityChip：entityId 用 r.entity_id（唯一实体标识），点击 → openEntity
                       // EntityChip 已在文件顶部 import，此处直接使用
-                      <EntityChip key={j} entityId={r.entity_id} />
+                      <EntityChip key={j} entityId={r.entity_id} label={r.display_text} />
                     ))}
                   </div>
                 )}

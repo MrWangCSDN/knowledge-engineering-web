@@ -36,7 +36,9 @@ export function EntityRef({ entityId, children }: { entityId: string; children?:
   )
 }
 
-export function EntityChip({ entityId }: { entityId: string }) {
+// label 可选：底部 section 引用有后端给的人类可读 display_text（如 'Xxx.method()'），
+// 优先展示它；缺省（如 message 级 cited_entities 只有 id）才回退 shortLabel(entityId)。
+export function EntityChip({ entityId, label }: { entityId: string; label?: string }) {
   // 同 EntityRef：读取高亮上下文 + 代码查看器 openEntity action
   const { active, setActive } = useContext(HighlightCtx)
   // 判断该 chip 当前是否高亮
@@ -52,7 +54,7 @@ export function EntityChip({ entityId }: { entityId: string }) {
       aria-label={`引用实体 ${entityId}`}
       className={`px-2 py-0.5 rounded-full border text-[12px] cursor-pointer transition-colors text-[var(--ref-accent)] border-[var(--ref-accent)]/40 hover:bg-[var(--ref-accent)]/10 ${on ? 'bg-[var(--ref-accent)]/15' : ''}`}
     >
-      {shortLabel(entityId)}
+      {label ?? shortLabel(entityId)}
     </button>
   )
 }
