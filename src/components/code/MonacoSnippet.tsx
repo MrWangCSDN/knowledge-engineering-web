@@ -33,6 +33,7 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
     start: { l: number; c: number }   // Monaco 坐标（1-indexed）
     end: { l: number; c: number }
     entityId: string
+    wholeLine: boolean                // col 缺失的整行兜底项：点击该行任意列都算命中
   }[]>([])
 
   // ── 加载 / 错误 / 空态：不渲染 Monaco ─────────────────────────────────────
@@ -52,6 +53,7 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
       start: { l: d.startLineNumber, c: d.startColumn },
       end:   { l: d.endLineNumber,   c: d.endColumn   },
       entityId: d.entityId,
+      wholeLine: d.wholeLine,
     }))
 
     // deltaDecorations(旧装饰id[], 新装饰[]) → 在编辑器上添加/替换装饰
@@ -78,8 +80,8 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
       // 在 decoRef 中查找命中的装饰范围（行相同 + 列在范围内）
       const hit = decoRef.current.find(d =>
         pos.lineNumber === d.start.l &&
-        pos.column >= d.start.c &&
-        pos.column <= d.end.c
+        // wholeLine 兜底项（col 缺失，整行高亮）→ 点该行任意列都命中；否则按列范围
+        (d.wholeLine || (pos.column >= d.start.c && pos.column <= d.end.c))
       )
 
       // 命中 → openEntity 打开/激活对应实体 tab（返回 Promise，void 处理防 linter 警告）
