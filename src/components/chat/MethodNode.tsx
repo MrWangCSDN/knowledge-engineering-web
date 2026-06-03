@@ -68,6 +68,11 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
   // 视觉密度跟 ChatGPT / Linear 工作流图对齐
   const displayLabel = data.label + (data.sig ?? '')
 
+  // 2026-06-03：短类名（去包名）—— 区分同名方法的不同分层
+  // （Controller.register / Service.register / Impl.register 在图上一眼分得清）；
+  // 完整全限定名仍在 title hover 里。仅在有 classOf 时显示这一行。
+  const shortClass = data.classOf ? data.classOf.split('.').pop() : ''
+
   return (
     <div
       // 节点容器：圆角 + 阴影 + 左侧 3px accent 竖条（按 kind 着色）
@@ -91,23 +96,32 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
 
-      {/* 节点内容区 —— 紧凑单行：icon + label(含sig) */}
-      {/* 2026-06-02：py-2 → py-1.5；省掉 classOf 第二行（hover tooltip 显示完整路径） */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5">
-        <span className="text-[12px] shrink-0" aria-hidden>{icon}</span>
-        {/* label + sig 拼一起显示；超长 truncate 加 ... */}
-        {/* 用 EntityRef 套上（如果有 entityId），实现点击跳源码 */}
-        {data.entityId ? (
-          <EntityRef entityId={data.entityId}>
+      {/* 节点内容区 —— 两行：短类名（分层）+ icon + label(含sig) */}
+      {/* 2026-06-03：恢复类名行但用「短类名」(去包名) + text-[10px]，让同名方法的不同层
+          （Controller/Service/Impl）一眼区分；完整全限定名仍在 hover tooltip。
+          配色走 token（text-muted-foreground），light/dark 自动跟随，无硬编码色值 */}
+      <div className="flex flex-col px-3 py-1.5">
+        {shortClass && (
+          <span className="font-mono text-[10px] leading-tight text-muted-foreground truncate">
+            {shortClass}
+          </span>
+        )}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] shrink-0" aria-hidden>{icon}</span>
+          {/* label + sig 拼一起显示；超长 truncate 加 ... */}
+          {/* 用 EntityRef 套上（如果有 entityId），实现点击跳源码 */}
+          {data.entityId ? (
+            <EntityRef entityId={data.entityId}>
+              <span className="font-mono text-[12.5px] text-foreground truncate">
+                {displayLabel}
+              </span>
+            </EntityRef>
+          ) : (
             <span className="font-mono text-[12.5px] text-foreground truncate">
               {displayLabel}
             </span>
-          </EntityRef>
-        ) : (
-          <span className="font-mono text-[12.5px] text-foreground truncate">
-            {displayLabel}
-          </span>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

@@ -57,7 +57,9 @@ const NODE_TYPES: NodeTypes = { method: MethodNode }
 // 2026-06-02 美化：尺寸往实际渲染最大宽度（max-w-[280]）+ 含 classOf hover tooltip 简化后
 // 的真实高度（~44px）对齐，让 dagre 算出来的间距视觉舒展不挤压
 const NODE_WIDTH = 260
-const NODE_HEIGHT = 48
+// 2026-06-03：节点恢复「短类名 + 方法名」两行，实际高度 ~58px → dagre 估值同步上调，
+// 避免 LR 布局同 rank 节点竖向间距被低估而视觉挤压
+const NODE_HEIGHT = 58
 
 /**
  * 用 dagre 算 LR (Left-to-Right) 布局，返回带 position 的 ReactFlow 节点。
