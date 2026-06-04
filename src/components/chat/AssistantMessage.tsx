@@ -50,6 +50,7 @@ import { ThinkingBlock } from './ThinkingBlock'
 import { TodoList } from './TodoList'
 import { CodeBlock } from './CodeBlock'
 import { extractStreamingSections } from './extractSectionContents'
+import { buildAnswerSegments } from './buildAnswerSegments'
 import { useThemeStore } from '@/store/theme'
 
 // v1.10：ReactMarkdown components 覆盖 — 把 fenced code block 渲染为 ChatGPT 风格 CodeBlock
@@ -364,18 +365,23 @@ export function AssistantMessage({
         {streaming && <span className="ml-1 animate-pulse">正在思考…</span>}
       </div>
 
-      {/* v1.3 ReAct：tool 调用卡片（在答案之前展示，让用户看到 LLM 的"思考过程"）*/}
-      {message.tool_calls && Object.keys(message.tool_calls).length > 0 && (
-        <div className="mb-3">
-          {Object.entries(message.tool_calls).map(([id, tc]) => (
-            <ToolCallCard
-              key={id}
-              starting={tc.starting}
-              complete={tc.complete}
-            />
-          ))}
-        </div>
-      )}
+      {/* 调查过程（调查类工具）：收敛为一条低调可展开行；渲染类工具（含 render）不在此——已内联进答案。
+          设计 [[业务问答-agent化输出改造-设计]] §5.4。颜色走 token，light/dark 自适应。 */}
+      {(() => {
+        // 过滤掉带 render 的（渲染类，已内联/补渲染）；只把调查类（ke_search/ke_callees…）收进折叠
+        const calls = Object.entries(message.tool_calls || {}).filter(([, tc]) => tc.render == null)
+        if (calls.length === 0) return null
+        return (
+          <details className="mb-3 text-[12px] text-muted-foreground">
+            <summary className="cursor-pointer select-none">调查过程（看了 {calls.length} 处）</summary>
+            <div className="mt-1 space-y-1">
+              {calls.map(([id, tc]) => (
+                <ToolCallCard key={id} starting={tc.starting} complete={tc.complete} />
+              ))}
+            </div>
+          </details>
+        )
+      })()}
 
       {/* agent 推理灰字（C-frontend）*/}
       <ThinkingBlock thinking={message.thinking} streaming={streaming} />
@@ -470,6 +476,13 @@ export function AssistantMessage({
               </div>
             )
           })}
+          {/* agent render_call_graph 工具产出的调用图：流式结束后答案已转 sections（raw_stream 删除），
+              在此据 tool_calls.render 补渲染，让图持久化（不随 raw_stream 消失）。设计 §5.3。 */}
+          {Object.values(message.tool_calls || {})
+            .filter((tc) => tc.render?.kind === 'call_graph')
+            .map((tc, ri) => (
+              <CallChainFlow key={`rb${ri}`} data={tc.render!.data as CallChainData} theme={theme} />
+            ))}
         </div>
       ) : streaming && message.raw_stream ? (
         // v1.6 token 流 + v1.8 markdown + v1.9 JSON 折叠
@@ -520,14 +533,22 @@ export function AssistantMessage({
             )
           }
 
-          // ── 分支 2：普通 markdown raw stream（如纯文本 chat）──
+          // ── 分支 2：agent 自由 markdown → 有序段（文本段 markdown + 调用图内联）──
+          // render_call_graph 工具产出的调用图按到达偏移 at 内联进文本（设计 §5.3）；
+          // 其余为文本段走 ReactMarkdown。无 render 时退化为单文本段（等价旧行为）。
+          const segments = buildAnswerSegments(raw, message.tool_calls)
           return (
             <div className={MD_PROSE_STREAM}>
-              {/* v1.10: components={MD_COMPONENTS} 让代码块走 CodeBlock 语法高亮 */}
-              {/* 用 deferredRawStream（低优先级）—— 高频 token 时不阻塞 UI */}
-              <ReactMarkdown {...MD_REMARK_PROPS}>
-                {raw}
-              </ReactMarkdown>
+              {segments.map((seg, i) =>
+                seg.kind === 'render' && seg.renderKind === 'call_graph' ? (
+                  // 内联调用图：复用 CallChainFlow（点击跳源码 / 文件名 tab / 方法置顶）
+                  <CallChainFlow key={`r${i}`} data={seg.data as CallChainData} theme={theme} />
+                ) : (
+                  <ReactMarkdown key={`t${i}`} {...MD_REMARK_PROPS}>
+                    {seg.kind === 'text' ? seg.content : ''}
+                  </ReactMarkdown>
+                ),
+              )}
               <span className="ml-0.5 animate-pulse">▌</span>
             </div>
           )
