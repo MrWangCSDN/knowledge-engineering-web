@@ -67,6 +67,23 @@ function saveWidth(w: number): void {
   }
 }
 
+/**
+ * 从实体 id 取「文件 key」——用于 IDEA 式「一个文件一个 tab」去重。
+ *
+ * 设计：实体 id 形如 `com.x.AlipayServiceImpl::pay#(String)`。
+ *   - split('::')[0] → 取 `::` 前的类全限定名（去掉方法名与参数签名）
+ *   - split('$')[0]  → 去掉内部类后缀（`Outer$Inner` → `Outer`），归并到同一物理文件
+ * 同一文件的不同方法 fileKey 相同 → 复用同一 tab（点不同方法只在该 tab 内滚动定位），
+ * 不同文件 fileKey 不同 → 各自独立 tab。
+ *
+ * @param entityId 实体持久 key
+ * @returns 文件级 key（类全限定名、去内部类后缀）
+ */
+export function fileKeyOf(entityId: string): string {
+  const cls = entityId.split('::')[0]   // `::` 前 = 类全限定名（无 `::` 时返回原串，兜底）
+  return cls.split('$')[0] || cls       // 去内部类后缀；'||' 防止极端空串
+}
+
 // create<T>((set, get) => ({...})) 是 Zustand 的 vanilla 范式（无 immer）
 // set：更新 state（浅合并）；get：读取当前 state（用于 actions 内部）
 export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
@@ -80,29 +97,49 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
   // 设置工程 id，通常由 ChatPage 在 mount 时调用
   setProject: (projectId) => set({ projectId }),
 
-  // 核心 action：打开实体 tab
+  // 核心 action：打开实体 tab（IDEA 式：一个文件一个 tab）
   // async 函数返回 Promise<void>，调用方 await 可等待加载完成
   openEntity: async (entityId) => {
     const { projectId, tabs } = get()             // 读取当前状态快照
     if (!projectId) return                        // 防御：无工程上下文时不动作
 
-    // 已有该 tab → 直接激活 + 打开抽屉，不重复请求（幂等复用）
-    if (tabs.some(t => t.entityId === entityId)) {
-      set({ open: true, activeEntityId: entityId })
-      return
+    const key = fileKeyOf(entityId)               // 该实体所属文件的 key（类全限定名）
+    // 找该「文件」是否已有 tab（不是按方法、而是按文件去重 → IDEA 式同文件单 tab）
+    const existing = tabs.find(t => fileKeyOf(t.entityId) === key)
+
+    if (existing) {
+      // 同一方法（含加载中）再次打开 → 仅激活，不重复请求（幂等复用）
+      if (existing.entityId === entityId) {
+        set({ open: true, activeEntityId: entityId })
+        return
+      }
+      // 同文件、不同方法 → 复用该 tab 并指向新方法：
+      // 保留旧 snippet（同文件整文件内容相同）避免空白闪烁，仅置 loading，
+      // 待重取片段拿到新方法的 start_line 后由 MonacoSnippet 重新 reveal 定位。
+      set(s => ({
+        open: true,
+        activeEntityId: entityId,                 // 激活态切到新方法的 entityId
+        tabs: s.tabs.map(t =>
+          fileKeyOf(t.entityId) === key
+            ? { ...t, entityId, loading: true, error: null }  // 复用同一 tab，指向新方法
+            : t
+        ),
+      }))
+    } else {
+      // 新文件 → 新建 tab：先插 loading 占位，让抽屉立即可见、减少视觉空白
+      // 函数式 set(s => ...) 读最新 tabs，防并发 openEntity 互相覆盖占位
+      set(s => ({
+        open: true,
+        activeEntityId: entityId,
+        tabs: [...s.tabs, { entityId, snippet: null, loading: true, error: null }],
+      }))
     }
 
-    // 新 tab：先插 loading 占位，让抽屉立即可见、减少视觉空白
-    // 用函数式 set(s => ...) 读最新 tabs，与下方 try/catch 一致——严格防并发 openEntity 互相覆盖占位
-    set(s => ({
-      open: true,
-      activeEntityId: entityId,
-      tabs: [...s.tabs, { entityId, snippet: null, loading: true, error: null }],
-    }))
-
+    // ── 共用拉取逻辑（新建 / 复用同文件换方法 都走这里）──
     try {
       const snippet = await getCodeSnippet(projectId, entityId)
       // set(fn) 接收函数形式：fn 拿到最新 state，防止并发竞态覆盖其他 tab
+      // 按 entityId 精确匹配回填——快速连点不同方法时只有最后一次的结果命中（旧的因 entityId 已变而丢弃）
       set(s => ({
         tabs: s.tabs.map(t =>
           t.entityId === entityId ? { ...t, snippet, loading: false } : t

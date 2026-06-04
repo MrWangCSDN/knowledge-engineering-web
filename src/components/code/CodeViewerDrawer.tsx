@@ -1,13 +1,13 @@
 // src/components/code/CodeViewerDrawer.tsx
-// 右侧代码片段抽屉：Tab 栏（多实体）+ 主区 Monaco 片段 + callers 侧栏（反向跳转）。
+// 右侧代码片段抽屉：Tab 栏（IDEA 式一个文件一个 tab，标签=文件名）+ 主区 Monaco 整文件片段。
 // 设计 [[代码片段查看器-设计]] §5。颜色走 token、light/dark 双达标。
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react'  // useRef 存拖拽起点（不触发重渲染）；ReactPointerEvent 是 React 合成指针事件类型
-import { useCodeViewerStore } from '@/store/codeViewer'   // Zustand store：读取抽屉状态 + actions
+import { useCodeViewerStore, fileKeyOf, type ViewerTab } from '@/store/codeViewer'   // Zustand store + 文件 key 助手 + tab 类型
 import { useThemeStore } from '@/store/theme'              // 全局主题 store：'light' | 'dark'
 import { MonacoSnippet } from './MonacoSnippet'            // Monaco 代码片段渲染组件
 
 /**
- * 将实体 id 转成抽屉 Tab 上展示的短名。
+ * 将实体 id 转成抽屉 Status bar 上展示的方法短名。
  * 例：'com.example.OrderService::create#(OrderDTO)' → 'create'
  *
  * @param entityId - 完整实体 id（格式 ClassName::method#(params)）
@@ -18,6 +18,27 @@ function shortName(entityId: string): string {
   const head = entityId.split('#')[0]
   // split('::').pop() 取最后一段，即方法名；'||' 兜底防空字符串
   return head.split('::').pop() || head
+}
+
+/**
+ * Tab 标签文案 —— 像 IDEA 编辑器 tab 那样显示「文件名」（含扩展名），而非方法名。
+ *
+ * - 片段已加载（snippet 有 file_path）→ 取路径末段作文件名（权威，含真实扩展名），如 'AlipayServiceImpl.java'
+ * - 加载中（snippet 尚未到）→ 用实体 id 推出的简单类名兜底，避免标签空白
+ *
+ * @param tab - 已打开的实体片段 tab
+ * @returns 用于 Tab 显示的文件名
+ */
+function fileLabel(tab: ViewerTab): string {
+  const fp = tab.snippet?.file_path                    // 可选链：snippet 为 null（加载中）时为 undefined
+  if (fp) {
+    const seg = fp.split('/')                          // 按 '/' 切路径
+    return seg[seg.length - 1] || fp                   // 末段 = 文件名；'||' 兜底（如以 '/' 结尾）
+  }
+  // 加载中兜底：从 entityId 取简单类名（类全限定名末段、去内部类后缀）
+  const cls = tab.entityId.split('::')[0]              // `::` 前 = 类全限定名
+  const simple = cls.split('.').pop() || cls           // 末段 = 简单类名
+  return simple.split('$')[0] || simple                // 去内部类后缀（Outer$Inner → Outer）
 }
 
 /**
@@ -40,7 +61,6 @@ export function CodeViewerDrawer() {
   const switchTab    = useCodeViewerStore(s => s.switchTab)      // 切换 tab action
   const closeTab     = useCodeViewerStore(s => s.closeTab)       // 关闭单个 tab action
   const close        = useCodeViewerStore(s => s.close)          // 收起抽屉 action
-  const openEntity   = useCodeViewerStore(s => s.openEntity)     // 打开新实体 tab action（callers 跳转用）
   const width        = useCodeViewerStore(s => s.width)          // 面板宽度（px）：分隔条拖拽调整
   const setWidth     = useCodeViewerStore(s => s.setWidth)       // 设置面板宽度 action
 
@@ -89,8 +109,9 @@ export function CodeViewerDrawer() {
         {tabs.map(t => (
           // 每个 tab：激活态用 bg-muted/text-foreground，非激活态用 text-muted-foreground
           // 颜色均走 token，不写裸色值
+          // key 用 fileKeyOf（文件级 key）：IDEA 式一个文件一个 tab，同文件换方法不重挂载
           <div
-            key={t.entityId}
+            key={fileKeyOf(t.entityId)}
             className={[
               'flex items-center gap-1 rounded px-2 py-1 text-[12.5px] cursor-pointer',
               t.entityId === activeEntityId
@@ -98,10 +119,10 @@ export function CodeViewerDrawer() {
                 : 'text-muted-foreground hover:bg-muted/60', // 非激活：次级文字 + hover 悬停
             ].join(' ')}
             onClick={() => switchTab(t.entityId)}             // 点击 tab 区域切换激活
-            title={t.entityId}                                // tooltip 显示完整 entityId
+            title={t.snippet?.file_path ?? t.entityId}        // tooltip 显示完整文件路径（未加载则退化为 entityId）
           >
-            {/* 短名展示（方法名），不显示类名和参数列表，节省 Tab 栏宽度 */}
-            <span>{shortName(t.entityId)}</span>
+            {/* 文件名展示（像 IDEA tab），不显示方法名——当前方法在下方 Status bar 标出 */}
+            <span>{fileLabel(t)}</span>
 
             {/* 关闭按钮：e.stopPropagation() 防止冒泡到 div.onClick（避免触发 switchTab）*/}
             <button
@@ -147,50 +168,16 @@ export function CodeViewerDrawer() {
         </div>
       )}
 
-      {/* ── 主区：Monaco 片段（flex-1 撑满）+ callers 侧栏（条件渲染）── */}
+      {/* ── 主区：Monaco 整文件片段（flex-1 撑满）── */}
       {/* min-h-0 重要：flex 子元素默认 min-height: auto，不加此类高度无法正确收缩 */}
-      <div className="flex min-h-0 flex-1">
-
-        {/* Monaco 代码片段区：flex-1 占满剩余宽度；min-h-0 同上 */}
-        <div className="min-h-0 flex-1">
-          {/* MonacoSnippet 接受 snippet/loading/error/theme，对应激活 tab 数据 */}
-          <MonacoSnippet
-            snippet={active?.snippet ?? null}   // 可选链：active 为 null 时取 null
-            loading={active?.loading}           // undefined → MonacoSnippet 默认 false
-            error={active?.error}               // undefined → MonacoSnippet 默认 null
-            theme={theme}                        // 传递主题（light/dark）给 Monaco 样式
-          />
-        </div>
-
-        {/* callers 侧栏：仅当激活 tab 有 callers 数据时渲染 */}
-        {/* ?.length 安全访问数组长度；为 0 / null / undefined 时不渲染 */}
-        {active?.snippet?.callers?.length ? (
-          // w-48 = 12rem 固定宽度；shrink-0 阻止 flex 压缩；border-l 左分隔线（token）
-          <div className="w-48 shrink-0 overflow-y-auto border-l border-border p-2">
-            {/* 侧栏标题：uppercase 小型大写字母，muted 次级颜色 */}
-            <div className="mb-1 text-[11px] uppercase text-muted-foreground">
-              被调用方 (callers)
-            </div>
-
-            {/* 遍历 callers 列表，每个 caller 渲染为可点击按钮 */}
-            {active.snippet.callers.map(c => (
-              <button
-                key={c.entity_id}
-                type="button"
-                // void 处理 openEntity 返回的 Promise，防止 lint 警告（react-hooks/exhaustive-deps）
-                onClick={() => void openEntity(c.entity_id)}
-                title={c.entity_id}               // tooltip 显示完整 entityId
-                // text-[var(--ref-accent)]：走 CSS 变量，已在 global.css 中定义 light/dark 双档
-                // hover:bg-[var(--ref-accent)]/10：10% 透明度 accent 背景色作为 hover 反馈
-                className="block w-full truncate rounded px-1.5 py-0.5 text-left text-[12px] text-[var(--ref-accent)] hover:bg-[var(--ref-accent)]/10"
-              >
-                {/* 展示调用方的 name（短名），完整 id 在 title 中 */}
-                {c.name}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
+      <div className="min-h-0 flex-1">
+        {/* MonacoSnippet 接受 snippet/loading/error/theme，对应激活 tab 数据 */}
+        <MonacoSnippet
+          snippet={active?.snippet ?? null}   // 可选链：active 为 null 时取 null
+          loading={active?.loading}           // undefined → MonacoSnippet 默认 false
+          error={active?.error}               // undefined → MonacoSnippet 默认 null
+          theme={theme}                        // 传递主题（light/dark）给 Monaco 样式
+        />
       </div>
       </aside>
     </>
