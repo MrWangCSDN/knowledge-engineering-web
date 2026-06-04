@@ -58,14 +58,18 @@ export function ChatPage() {
   //   - 切回 URL=/chat/oldSid → selector 立即读到 streamingBySession[oldSid] → UI 恢复流式
   //   - status 单全局字段，故按 URL sid 是否有 streaming 派生 isStreaming
   // ────────────────────────────────────────────────────────────────────────
-  const messages = useChatStore(s =>
-    sessionId ? s.messagesBySession[sessionId] ?? EMPTY_MSGS : EMPTY_MSGS
-  )
-  // 当前 URL sessionId 对应的 streamingMessage（按 sid 索引，天然只属于当前 session）
-  // 旧实现需要"session_id 匹配防护"；新实现 byId map 直接是 key 隔离，不需要二次防护
-  const streamingMessage = useChatStore(s =>
-    sessionId ? s.streamingBySession[sessionId] ?? null : null
-  )
+  // 视图 sid：优先 URL sessionId；URL 还没有 sid（新对话刚点发送、meta 未回）时
+  // 回退到 store.currentSessionId（sendMessage 已同步置为临时 sid）→ 立刻渲染对话视图（乐观 UI）。
+  // 注：既有会话切换走 URL（sessionId 优先），此回退只在「URL 无 sid」窗口生效，不影响多会话隔离。
+  const messages = useChatStore(s => {
+    const viewSid = sessionId ?? s.currentSessionId
+    return viewSid ? s.messagesBySession[viewSid] ?? EMPTY_MSGS : EMPTY_MSGS
+  })
+  // streamingMessage 同款回退（按 sid 索引，天然只属于当前 session；byId map key 隔离无需二次防护）
+  const streamingMessage = useChatStore(s => {
+    const viewSid = sessionId ?? s.currentSessionId
+    return viewSid ? s.streamingBySession[viewSid] ?? null : null
+  })
   const status = useChatStore(s => s.status)
   const error = useChatStore(s => s.error)
   const sendMessage = useChatStore(s => s.sendMessage)
@@ -145,7 +149,9 @@ export function ChatPage() {
   useEffect(() => {
     const liveSessionId = useChatStore.getState().currentSessionId
     // 方向 ①：store 有 / URL 无 → 回填（新会话拿到真 sid 后写回 URL）
-    if (liveSessionId && projectId && !sessionId) {
+    // 跳过临时 sid（sess_tmp_）：乐观渲染期 currentSessionId 先是临时 sid，此时不写 URL，
+    // 免得地址栏闪现 sess_tmp_xxx；等 meta 把 currentSessionId 改写为真 sid 后再跳。
+    if (liveSessionId && !liveSessionId.startsWith('sess_tmp_') && projectId && !sessionId) {
       navigate(`/project/${projectId}/chat/${liveSessionId}`, { replace: true })
       return
     }

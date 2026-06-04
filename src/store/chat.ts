@@ -319,6 +319,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         status: 'submitting',
         error: null,
         currentProjectId: projectId,
+        // 乐观渲染：点发送的瞬间就把 currentSessionId 置为本会话（新对话=临时 sid）。
+        // ChatPage 据此立刻把 user msg + 思考态渲染出来，不再干等后端首个 meta 往返（~1s）。
+        // 既有会话续问时 initialSid===currentSessionId，等价 no-op；
+        // meta 拿到真 sid 后此值被改写为 realSid（见下方 case 'meta'），临时 sid 经迁移逻辑替换。
+        currentSessionId: initialSid,
       }
     })
 

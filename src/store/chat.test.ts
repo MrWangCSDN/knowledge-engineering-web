@@ -141,3 +141,23 @@ describe('chat store contextUsage 接线', () => {
     expect(lsBlock).toContain('computeUsageFromMessages(detail.messages)')
   })
 })
+
+/**
+ * §新对话乐观渲染（2026-06-04）：sendMessage 首个 set 必须同步置 currentSessionId，
+ * 让 ChatPage 点发送的瞬间就翻到对话视图，而非干等后端首个 meta 往返（~1s）。
+ * 房规：sendMessage SSE 闭包不可单测 → 用源码不变量兜底（同 case 'done' / case 'meta' 手法）。
+ */
+describe('chat store sendMessage 乐观渲染', () => {
+  it("源码不变量：sendMessage 首个 set（user msg + submitting）同步带 currentSessionId: initialSid", () => {
+    const src = readFileSync('src/store/chat.ts', 'utf-8')
+    const smIdx = src.indexOf('sendMessage: async')
+    expect(smIdx).toBeGreaterThan(-1)
+    // 取 sendMessage 起点 → 首个 AbortController（SSE 发起前）之间的"首段"，
+    // 该段含首个 set（立即加 user msg + 置状态/会话），不含后续 SSE 逻辑
+    const ctrlIdx = src.indexOf('new AbortController()', smIdx)
+    expect(ctrlIdx).toBeGreaterThan(smIdx)
+    const headBlock = src.slice(smIdx, ctrlIdx)
+    expect(headBlock).toContain("status: 'submitting'")
+    expect(headBlock).toContain('currentSessionId: initialSid')   // ← 乐观渲染关键：不等 meta
+  })
+})
