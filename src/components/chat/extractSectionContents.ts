@@ -118,3 +118,51 @@ export function extractOpenContent(raw: string): string | null {
   // 同 extractSectionContents：unescape + 补未闭合 fence（防 markdown 破坏）
   return ensureClosedFences(unescapeJsonString(m[1]))
 }
+
+
+// section 的 type 字段（按出现顺序，用于把 content 配回它所属段的类型）
+const TYPE_RE = /"type"\s*:\s*"([a-zA-Z_]+)"/g
+
+/** 流式渲染用的单段信息：类型 + 当前内容 + 是否已闭合。 */
+export interface StreamSection {
+  type: string | null   // overview / entry_point / call_chain / db_ops / rules / sources …
+  content: string       // 已 unescape 的 content（call_chain 段是 JSON 字符串，前端会改显占位）
+  complete: boolean      // content 是否已闭合（false=正在写，可逐字流）
+}
+
+/**
+ * 把流式 raw_stream 解析成"按段"的 StreamSection 列表（含正在写的未闭合段）。
+ *
+ * 用途（方案 B）：流式时文本段逐字渲染、call_chain 段改显占位骨架；需要知道每段的 type。
+ * 配对逻辑：每个 section 对象里 "type" 必在 "content" 之前出现 → 第 i 个 type 配第 i 个 content。
+ *
+ * @returns 段列表（顺序与 LLM 输出一致）；最后一段若 complete=false 即正在写。
+ */
+export function extractStreamingSections(raw: string): StreamSection[] {
+  if (!raw || !raw.includes('```json')) {
+    return []
+  }
+  // 1. 所有段的 type（按出现顺序）
+  const types: string[] = []
+  let tm: RegExpExecArray | null
+  TYPE_RE.lastIndex = 0
+  while ((tm = TYPE_RE.exec(raw)) !== null) {
+    types.push(tm[1])
+  }
+  // 2. 已闭合 content（复用）+ 3. 末尾未闭合 content
+  const closed = extractSectionContents(raw)
+  const open = extractOpenContent(raw)
+
+  const out: StreamSection[] = []
+  // 已闭合段：第 i 个 content 配第 i 个 type
+  closed.forEach((c, i) => out.push({ type: types[i] ?? null, content: c, complete: true }))
+  // 正在写的那段（未闭合 content）：配 types[closed.length]
+  if (open !== null) {
+    out.push({ type: types[closed.length] ?? null, content: open, complete: false })
+  } else if (types.length > closed.length) {
+    // content 还没开始、但段已起头（如 call_chain 刚出 type/title）→ 占位段（content 空），
+    // 让 call_chain 占位骨架尽早出现、不留空窗
+    out.push({ type: types[closed.length] ?? null, content: '', complete: false })
+  }
+  return out
+}

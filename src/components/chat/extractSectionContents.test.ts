@@ -11,7 +11,7 @@
  * 我们用宽松正则提 `"content": "..."` 字段，逐个收集。
  */
 import { describe, it, expect } from 'vitest'
-import { extractSectionContents, extractOpenContent } from './extractSectionContents'
+import { extractSectionContents, extractOpenContent, extractStreamingSections } from './extractSectionContents'
 
 
 describe('extractSectionContents', () => {
@@ -81,5 +81,40 @@ describe('extractOpenContent（末尾正在写的未闭合 content，用于 over
     const raw = '```json\n{"sections":[{"type":"overview","content":"完整段","references":[]},' +
       '{"type":"entry_point","content":"正在写的入口'
     expect(extractOpenContent(raw)).toBe('正在写的入口')
+  })
+})
+
+
+describe('extractStreamingSections（按段解析，含 type + 未闭合段）', () => {
+  it('没有 ```json fence → []', () => {
+    expect(extractStreamingSections('你好')).toEqual([])
+  })
+
+  it('已闭合 overview + 正在写 entry_point → type 配对 + complete 标记', () => {
+    const raw = '```json\n{"sections":[' +
+      '{"type":"overview","title":"概述","content":"业务概述内容","references":[]},' +
+      '{"type":"entry_point","title":"入口","content":"正在写入口'
+    expect(extractStreamingSections(raw)).toEqual([
+      { type: 'overview', content: '业务概述内容', complete: true },
+      { type: 'entry_point', content: '正在写入口', complete: false },
+    ])
+  })
+
+  it('call_chain 段按 type 识别（内容是 JSON，交前端改占位）', () => {
+    const raw = '```json\n{"sections":[' +
+      '{"type":"overview","content":"概述","references":[]},' +
+      '{"type":"call_chain","title":"调用链路","content":"{\\"nodes\\":[]}","references":[]}'
+    const out = extractStreamingSections(raw)
+    expect(out[1].type).toBe('call_chain')
+    expect(out[1].complete).toBe(true)
+  })
+
+  it('段刚起头（出了 type 还没 content）→ 给 content 空的占位段（让 call_chain 骨架尽早出现）', () => {
+    const raw = '```json\n{"sections":[' +
+      '{"type":"overview","content":"概述","references":[]},' +
+      '{"type":"call_chain","title":"调用链路"'
+    const out = extractStreamingSections(raw)
+    expect(out.length).toBe(2)
+    expect(out[1]).toEqual({ type: 'call_chain', content: '', complete: false })
   })
 })

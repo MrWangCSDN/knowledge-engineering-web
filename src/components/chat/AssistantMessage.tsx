@@ -8,7 +8,7 @@
  * v1.4（W14）：call_chain 段含 ```mermaid 块时分流给 MermaidDiagram。
  */
 import { lazy, Suspense, useState, useMemo, useDeferredValue } from 'react'
-import { Download } from 'lucide-react'
+import { Download, Workflow, Loader2 } from 'lucide-react'
 // v1.8：react-markdown 把流式 raw_stream 文本实时渲染成 markdown
 // remark-gfm 加 GitHub-flavored markdown 支持（表格 / 删除线 / 任务列表）
 import ReactMarkdown, { type Components, type Options } from 'react-markdown'
@@ -49,7 +49,7 @@ import { ToolCallCard } from './ToolCallCard'
 import { ThinkingBlock } from './ThinkingBlock'
 import { TodoList } from './TodoList'
 import { CodeBlock } from './CodeBlock'
-import { extractSectionContents, extractOpenContent } from './extractSectionContents'
+import { extractStreamingSections } from './extractSectionContents'
 import { useThemeStore } from '@/store/theme'
 
 // v1.10：ReactMarkdown components 覆盖 — 把 fenced code block 渲染为 ChatGPT 风格 CodeBlock
@@ -482,31 +482,38 @@ export function AssistantMessage({
         // token 就显示；deferredRawStream 只决定内部 markdown 渲染版本。
         (() => {
           const raw = deferredRawStream ?? ''
-          const sectionContents = extractSectionContents(raw)
           const isJsonStream = raw.includes('```json')
 
-          // ── 分支 1：流式 JSON 模式 → 折叠展示 section content ──
+          // ── 分支 1：流式 JSON 模式 → 按段折叠展示（方案 B）──
           if (isJsonStream) {
-            // v1.14（streaming UX）：还没有任何完整段时（= 正在写第一段 overview），
-            // 逐字流式渲染"未闭合"的 content → 开头立刻动起来；overview 一闭合就有完整段，
-            // 改走整段渲染（后续结构化段照旧整段，完成后再切 hasSections 富渲染）。
-            const openFirst = sectionContents.length === 0 ? extractOpenContent(raw) : null
-            const streamText = sectionContents.length > 0
-              ? sectionContents.join('\n\n---\n\n')   // 已有完整段 → 整段拼接
-              : (openFirst ?? '')                      // 仍在写 overview → 逐字流
+            // v1.15（streaming UX）：按段渲染——文本段逐字流（含正在写的未闭合段，开头就动起来）；
+            // call_chain 段在流式期间显「调用关系图」占位骨架（不露半截 JSON），完成后切 hasSections → ReactFlow。
+            const streamSections = extractStreamingSections(raw)
             return (
               <div className={MD_PROSE_STREAM}>
-                {streamText === '' ? (
-                  // 连第一段 content 都还没开始（只出了 ```json + type）→ 友好占位
+                {streamSections.length === 0 ? (
+                  // 连第一段都还没起头（只出了 ```json）→ 友好占位
                   <div className="text-[13px] text-muted-foreground italic">
                     正在生成结构化答案…
                   </div>
                 ) : (
-                  // 段间用 "\n\n---\n\n" 分隔，模拟原答案的段落感
-                  // v1.10: components={MD_COMPONENTS} 让流式代码块也走 CodeBlock 语法高亮
-                  <ReactMarkdown {...MD_REMARK_PROPS}>
-                    {streamText}
-                  </ReactMarkdown>
+                  streamSections.map((s, i) => (
+                    <div key={i}>
+                      {i > 0 && <hr className="my-3 border-border/60" />}
+                      {s.type === 'call_chain' ? (
+                        // 调用图占位骨架：lucide Workflow（预览节点图）+ Loader2 转圈；
+                        // 配色走 token（border / bg-muted / ref-accent），light/dark 自适应
+                        <div className="my-1 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-[13px] text-muted-foreground">
+                          <Workflow className="h-4 w-4 shrink-0 text-[var(--ref-accent)]" />
+                          <span>正在生成调用关系图…</span>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin opacity-60" />
+                        </div>
+                      ) : (
+                        // 文本段：markdown 渲染（最后一段未闭合时即逐字流）
+                        <ReactMarkdown {...MD_REMARK_PROPS}>{s.content}</ReactMarkdown>
+                      )}
+                    </div>
+                  ))
                 )}
                 <span className="ml-0.5 animate-pulse">▌</span>
               </div>
