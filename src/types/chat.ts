@@ -195,7 +195,7 @@ export interface Message {
    * Map(id → {starting, complete?})，前端用 ToolCallCard 渲染。
    * 使用 Record 替代 Map 方便 JSON 序列化（持久化时直接用）。
    */
-  tool_calls?: Record<string, { starting: ToolCallPayload; complete?: ToolCallPayload }>
+  tool_calls?: Record<string, { starting: ToolCallPayload; complete?: ToolCallPayload; render?: { kind: string; data: unknown }; at?: number }>
   /**
    * v1.6：LLM 流式输出的"原始 token 累计"。
    * 仅在 streaming 期间存在；流末解析出 sections 后 UI 不再显示这个字段。
@@ -285,6 +285,8 @@ export interface ToolCallPayload {
   arguments?: Record<string, unknown>
   /** phase==='complete' 时存在：工具返回的 JSON 字符串预览（前 600 字符）。 */
   result_preview?: string
+  /** 渲染类工具（render_call_graph 等）complete 时携带：图数据，前端内联渲染（CallChainFlow）。 */
+  render?: { kind: string; data: unknown }
 }
 
 /**

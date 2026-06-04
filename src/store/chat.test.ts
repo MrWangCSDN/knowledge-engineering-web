@@ -182,3 +182,15 @@ describe('chat store sendMessage 乐观渲染', () => {
     expect(metaBlock).toContain('streamingBySession: { ...nextStreamingBySession, [realSid]: newStreaming }')
   })
 })
+
+describe('chat SSE tool_call 透传 render（agent 内联调用图）', () => {
+  const src = readFileSync('src/store/chat.ts', 'utf-8')
+  it("case 'tool_call' 把 render 与到达偏移 at 存进 tool_call 条目", () => {
+    const i = src.indexOf("case 'tool_call':")
+    const j = src.indexOf("case 'token':", i)
+    const block = src.slice(i, j)
+    expect(block).toContain('render')        // 透传 render（渲染类工具的图数据）
+    expect(block).toContain('raw_stream')    // 记录到达时 raw_stream 偏移
+    expect(block).toContain('at:')           // 偏移字段 at（有序段内联用）
+  })
+})

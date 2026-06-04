@@ -510,7 +510,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 if (payload.phase === 'starting') {
                   tcs[payload.id] = { ...existing, starting: payload }
                 } else {
-                  tcs[payload.id] = { ...existing, complete: payload }
+                  // complete：渲染类工具（payload.render 非空）→ 记录 render + 到达时 raw_stream 偏移 at，
+                  // 供 buildAnswerSegments 把调用图按位置内联进自由文本（设计 §5.3）
+                  tcs[payload.id] = {
+                    ...existing,
+                    complete: payload,
+                    ...(payload.render != null
+                      ? { render: payload.render, at: (sm.raw_stream || '').length }
+                      : {}),
+                  }
                 }
                 return { ...sm, tool_calls: tcs }
               })
