@@ -26,7 +26,7 @@ interface Props {
  * 代码片段 Monaco 查看器组件。
  *
  * v1.13（2026-06-02）：
- *   - file_content 命中（< 200KB）→ 整文件视图 + revealLineInCenter(start_line) + 方法范围高亮
+ *   - file_content 命中（< 200KB）→ 整文件视图 + revealLineNearTop(start_line) 方法置顶 + 方法范围高亮
  *   - file_content=null（超大 / 读不到）→ 退化到 code 字段（方法片段）
  *
  * - loading / error / null snippet → 降级 UI（不渲染 Monaco，也是 Monaco 懒加载失败的兜底）
@@ -39,7 +39,7 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
   const openEntity = useCodeViewerStore(s => s.openEntity)
 
   // editorRef / monacoRef：保留 Monaco 实例引用，让 useEffect 在 snippet 切换时
-  // 重新做 setValue / revealLineInCenter / deltaDecorations
+  // 重新做 setValue / revealLineNearTop / deltaDecorations
   // （v1.13 之前 onMount 只跑一次，切 tab 后没刷新装饰 / reveal）
   const editorRef = useRef<monacoT.editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monacoT | null>(null)
@@ -59,7 +59,7 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
   // useEffect 监听 [snippet]，每次 snippet 引用变化触发：
   //   1. 算 callee decorations（整文件视图传 startLine=1，方法片段视图传 snippet.start_line）
   //   2. 加 method-range 高亮（仅整文件视图）
-  //   3. revealLineInCenter 滚到方法首行（仅整文件视图）
+  //   3. revealLineNearTop 把方法首行滚到 viewport 顶部（仅整文件视图）
   // editor 还没 mount 时 ref=null，跳过；onMount 时也会跑一次保证首次也装饰
   useEffect(() => {
     const editor = editorRef.current
@@ -108,9 +108,10 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
     ]
     decoIdsRef.current = editor.deltaDecorations(decoIdsRef.current, newDecorations)
 
-    // 3. 整文件视图：滚动让方法首行落到 viewport 中央
+    // 3. 整文件视图：滚动让方法首行落到 viewport 顶部（用户偏好：方法置顶展示、body 在下方铺开，
+    //    类似 IDE「跳转到定义」后方法顶在上沿）。revealLineNearTop 会留少量上边距（露出上方注解/签名）。
     if (useFullFile) {
-      editor.revealLineInCenter(snippet.start_line)
+      editor.revealLineNearTop(snippet.start_line)
     }
   }, [snippet])
 

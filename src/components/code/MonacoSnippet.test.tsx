@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
@@ -31,5 +32,20 @@ describe('MonacoSnippet', () => {
   it('error → 错误文案', () => {
     render(<MonacoSnippet snippet={null} error="未找到该实体的源码" theme="light" />)
     expect(screen.getByText('未找到该实体的源码')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 整文件视图的定位策略（2026-06-04，用户偏好）：方法首行滚到 viewport【顶部】而非居中。
+ * editor 实例方法（reveal*）在测试里被 stub 的 @monaco-editor/react 隔离、不真正调用，
+ * 故沿用本仓库源码不变量手法（见 chat.test.ts / ChatPage.contextbar.test.tsx）守定位策略不被改回居中。
+ */
+describe('MonacoSnippet 定位策略（方法置顶）', () => {
+  const src = readFileSync('src/components/code/MonacoSnippet.tsx', 'utf-8')
+  it('用 revealLineNearTop(start_line) 把方法滚到顶部', () => {
+    expect(src).toContain('editor.revealLineNearTop(snippet.start_line)')
+  })
+  it('不再用 revealLineInCenter（居中）', () => {
+    expect(src).not.toContain('revealLineInCenter')
   })
 })
