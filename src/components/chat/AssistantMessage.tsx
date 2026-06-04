@@ -49,7 +49,7 @@ import { ToolCallCard } from './ToolCallCard'
 import { ThinkingBlock } from './ThinkingBlock'
 import { TodoList } from './TodoList'
 import { CodeBlock } from './CodeBlock'
-import { extractSectionContents } from './extractSectionContents'
+import { extractSectionContents, extractOpenContent } from './extractSectionContents'
 import { useThemeStore } from '@/store/theme'
 
 // v1.10：ReactMarkdown components 覆盖 — 把 fenced code block 渲染为 ChatGPT 风格 CodeBlock
@@ -487,19 +487,25 @@ export function AssistantMessage({
 
           // ── 分支 1：流式 JSON 模式 → 折叠展示 section content ──
           if (isJsonStream) {
+            // v1.14（streaming UX）：还没有任何完整段时（= 正在写第一段 overview），
+            // 逐字流式渲染"未闭合"的 content → 开头立刻动起来；overview 一闭合就有完整段，
+            // 改走整段渲染（后续结构化段照旧整段，完成后再切 hasSections 富渲染）。
+            const openFirst = sectionContents.length === 0 ? extractOpenContent(raw) : null
+            const streamText = sectionContents.length > 0
+              ? sectionContents.join('\n\n---\n\n')   // 已有完整段 → 整段拼接
+              : (openFirst ?? '')                      // 仍在写 overview → 逐字流
             return (
               <div className={MD_PROSE_STREAM}>
-                {sectionContents.length === 0 ? (
-                  // 还没流出第一段 content → 给个友好占位
+                {streamText === '' ? (
+                  // 连第一段 content 都还没开始（只出了 ```json + type）→ 友好占位
                   <div className="text-[13px] text-muted-foreground italic">
                     正在生成结构化答案…
                   </div>
                 ) : (
-                  // 把已经完整的 content 拼起来，用 markdown 渲染
                   // 段间用 "\n\n---\n\n" 分隔，模拟原答案的段落感
                   // v1.10: components={MD_COMPONENTS} 让流式代码块也走 CodeBlock 语法高亮
                   <ReactMarkdown {...MD_REMARK_PROPS}>
-                    {sectionContents.join('\n\n---\n\n')}
+                    {streamText}
                   </ReactMarkdown>
                 )}
                 <span className="ml-0.5 animate-pulse">▌</span>

@@ -11,7 +11,7 @@
  * 我们用宽松正则提 `"content": "..."` 字段，逐个收集。
  */
 import { describe, it, expect } from 'vitest'
-import { extractSectionContents } from './extractSectionContents'
+import { extractSectionContents, extractOpenContent } from './extractSectionContents'
 
 
 describe('extractSectionContents', () => {
@@ -53,5 +53,33 @@ describe('extractSectionContents', () => {
   it('只有 ```json 头没出现 content 字段：空数组', () => {
     const raw = '```json\n{"sections":[{'
     expect(extractSectionContents(raw)).toEqual([])
+  })
+})
+
+
+describe('extractOpenContent（末尾正在写的未闭合 content，用于 overview 逐字流）', () => {
+  it('没有 ```json fence → null', () => {
+    expect(extractOpenContent('你好啊')).toBeNull()
+  })
+
+  it('正在写 overview（content 未闭合）→ 返回当前已写部分', () => {
+    const raw = '```json\n{"sections":[{"type":"overview","title":"业务概述","content":"用户提交订单后'
+    expect(extractOpenContent(raw)).toBe('用户提交订单后')
+  })
+
+  it('overview 已闭合、无后续未闭合 content → null（交回整段渲染）', () => {
+    const raw = '```json\n{"sections":[{"type":"overview","content":"已闭合内容","references":[]}'
+    expect(extractOpenContent(raw)).toBeNull()
+  })
+
+  it('未闭合内容含转义换行 → 正确 unescape', () => {
+    const raw = '```json\n{"sections":[{"type":"overview","content":"第一行\\n第二行还在写'
+    expect(extractOpenContent(raw)).toBe('第一行\n第二行还在写')
+  })
+
+  it('前面有已闭合段、末尾又有未闭合段 → 取末尾未闭合那段', () => {
+    const raw = '```json\n{"sections":[{"type":"overview","content":"完整段","references":[]},' +
+      '{"type":"entry_point","content":"正在写的入口'
+    expect(extractOpenContent(raw)).toBe('正在写的入口')
   })
 })

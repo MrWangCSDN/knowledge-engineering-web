@@ -90,3 +90,31 @@ export function extractSectionContents(raw: string): string[] {
   }
   return results
 }
+
+
+// 末尾"正在写、还没闭合"的那段 content（用于 overview 逐字流式渲染）。
+// 与 CONTENT_RE 的唯一区别：结尾是 `$`（一路吃到字符串末尾、**没有**闭合引号），
+// 而非闭合的 `"`。`.exec`（非 /g）找最左可达 `$` 的匹配——已闭合的段后面跟着 `","references"...`
+// 到不了 `$` 会失败、引擎右移，最终命中末尾真正未闭合的那段。
+const OPEN_CONTENT_RE = /"content"\s*:\s*"((?:\\.|[^"\\])*)$/
+
+/**
+ * 提取流式 raw_stream 末尾"正在写、未闭合"的单个 section.content。
+ *
+ * 用途：让第一段（overview，纯文本）在 content 闭合前就逐字流式显示（"开头就动起来"）；
+ * 一旦该段闭合，调用方改用 extractSectionContents 整段渲染（后续结构化段照旧整段）。
+ *
+ * @param raw 流式累积原始文本（可能含 ```json fence + 半截 JSON）
+ * @returns 未闭合 content 的当前已写部分；无未闭合段 / 无 json fence → null
+ */
+export function extractOpenContent(raw: string): string | null {
+  if (!raw || !raw.includes('```json')) {
+    return null
+  }
+  const m = OPEN_CONTENT_RE.exec(raw)
+  if (!m) {
+    return null
+  }
+  // 同 extractSectionContents：unescape + 补未闭合 fence（防 markdown 破坏）
+  return ensureClosedFences(unescapeJsonString(m[1]))
+}
