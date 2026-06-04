@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildAnswerSegments } from './buildAnswerSegments'
+import { buildAnswerSegments, stripReactflowFences } from './buildAnswerSegments'
 
 const tc = (over: Record<string, unknown>) => ({ name: 'x', phase: 'complete', ...over })
 
@@ -32,5 +32,32 @@ describe('buildAnswerSegments', () => {
   it('调查类 tool_call（无 render）不进段序列', () => {
     const tcs = { a: tc({ name: 'ke_search', result_preview: '...' }) }
     expect(buildAnswerSegments('正文', tcs)).toEqual([{ kind: 'text', content: '正文' }])
+  })
+
+  it('既有工具 render 块时，文本里手画的 ```reactflow 被剥掉（去重）', () => {
+    const raw = '说明：\n```reactflow\n{"nodes":[1]}\n```\n结尾'
+    const tcs = { a: tc({ render: { kind: 'call_graph', data: { nodes: [] } }, at: raw.length }) }
+    const segs = buildAnswerSegments(raw, tcs)
+    const textJoined = segs.filter(s => s.kind === 'text').map(s => (s as { content: string }).content).join('')
+    expect(textJoined).not.toContain('reactflow')          // 手画块被剥
+    expect(segs.some(s => s.kind === 'render')).toBe(true)  // 工具图保留
+  })
+
+  it('无工具 render 时，手画 ```reactflow 保留（唯一图来源，不剥）', () => {
+    const raw = '说明\n```reactflow\n{"nodes":[]}\n```'
+    const segs = buildAnswerSegments(raw, {})              // 无 render
+    expect((segs[0] as { content: string }).content).toContain('reactflow')
+  })
+})
+
+describe('stripReactflowFences', () => {
+  it('剥掉 ```reactflow 块、保留其余文本', () => {
+    const r = stripReactflowFences('前文\n```reactflow\n{"nodes":[]}\n```\n后文')
+    expect(r).not.toContain('reactflow')   // 围栏块整体删除
+    expect(r).toContain('前文')
+    expect(r).toContain('后文')
+  })
+  it('无 reactflow 块原样返回', () => {
+    expect(stripReactflowFences('正常文本')).toBe('正常文本')
   })
 })

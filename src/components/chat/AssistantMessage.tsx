@@ -50,7 +50,7 @@ import { ThinkingBlock } from './ThinkingBlock'
 import { TodoList } from './TodoList'
 import { CodeBlock } from './CodeBlock'
 import { extractStreamingSections } from './extractSectionContents'
-import { buildAnswerSegments } from './buildAnswerSegments'
+import { buildAnswerSegments, stripReactflowFences } from './buildAnswerSegments'
 import { useThemeStore } from '@/store/theme'
 
 // v1.10：ReactMarkdown components 覆盖 — 把 fenced code block 渲染为 ChatGPT 风格 CodeBlock
@@ -309,6 +309,10 @@ export function AssistantMessage({
 }: Props) {
   const sections = message.sections ?? []
   const hasSections = sections.length > 0
+  // 是否有 render_call_graph 工具产出的调用图 → 段内容里手画的 ```reactflow 要剥掉（去重，保留工具图）
+  const hasToolRender = Object.values(message.tool_calls || {}).some(
+    (tc) => tc.render?.kind === 'call_graph',
+  )
   // 主题：light / dark；mermaid 需要拿来挑 theme
   const theme = useThemeStore(s => s.theme)
   // v1.5 下载按钮的 loading 态（防止用户连点）
@@ -415,7 +419,9 @@ export function AssistantMessage({
                 if (parsedWhole) return [{ type: 'react-flow', data: parsedWhole }]
               }
               // (b) 其它情况一律走 fence 切片（含 reactflow / mermaid 两种 fence）
-              return splitDiagramFences(s.content || '')
+              // 有工具调用图时，剥掉段内手画的 ```reactflow（去重；下方另有工具 render 块补渲染）
+              const body = hasToolRender ? stripReactflowFences(s.content || '') : (s.content || '')
+              return splitDiagramFences(body)
             })()
             return (
               <div key={i}>

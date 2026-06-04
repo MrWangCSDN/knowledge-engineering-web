@@ -20,6 +20,18 @@ export type AnswerSegment =
   | { kind: 'render'; data: unknown; renderKind: string }
 
 /**
+ * 剥掉文本里手画的 ```reactflow fenced 块。
+ *
+ * 用途：当本条消息已有 render_call_graph 工具产出的调用图（render 块）时，LLM 偶尔仍会
+ * 在自由文本里又手画一张 ```reactflow（提示词压不住的 LLM 习惯）。手画图边常臆造、且与工具图重复，
+ * 故确定性地剥掉手画块，只保留准确的工具图。无工具图时不调用本函数（手画块作为唯一图保留）。
+ */
+export function stripReactflowFences(text: string): string {
+  // ```reactflow 到下一个 ``` 之间（含围栏）整体删除；[\s\S] 跨行，*? 非贪婪到最近的 ```
+  return (text || '').replace(/```reactflow[\s\S]*?```/g, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
  * 按 render 的 at 偏移，把 rawStream 切成文本段并交错插入渲染块。
  *
  * @param rawStream agent 自由输出累计文本
@@ -42,15 +54,17 @@ export function buildAnswerSegments(
 
   const segs: AnswerSegment[] = []
   let cursor = 0
-  // 在每个渲染点切一刀：先 push [cursor, at) 文本段（非空才 push），再 push 渲染块
+  // 在每个渲染点切一刀：先 push [cursor, at) 文本段（非空才 push），再 push 渲染块。
+  // 既有工具图（renders 非空）→ 文本段剥掉手画 ```reactflow（去重，保留准确的工具图）。
+  // 注意：用原始 text 按 at 切片（保偏移正确），只对切出的段内容去 reactflow。
   for (const r of renders) {
-    const chunk = text.slice(cursor, r.at)
+    const chunk = stripReactflowFences(text.slice(cursor, r.at))
     if (chunk) segs.push({ kind: 'text', content: chunk })
     segs.push({ kind: 'render', data: r.block.data, renderKind: r.block.kind })
     cursor = r.at
   }
-  // 收尾：最后一个渲染点之后的剩余文本
-  const tail = text.slice(cursor)
+  // 收尾：最后一个渲染点之后的剩余文本（同样去手画 reactflow）
+  const tail = stripReactflowFences(text.slice(cursor))
   if (tail) segs.push({ kind: 'text', content: tail })
   return segs
 }
