@@ -312,10 +312,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       content: question,
       created_at: new Date().toISOString(),
     }
+    // 空 assistant 占位（与 case 'meta' 创建的 newStreaming 同形态）：放进 streamingBySession[initialSid]，
+    // 让 AssistantMessage 立刻显示「正在思考…」（streaming=true + 内容空）。meta 到达时被 realSid 的真 streaming 替换；
+    // 中途点停止 → abort 的 !hasContent 分支直接清掉它（不残留空气泡）。
+    const thinkingPlaceholder: Message = {
+      id: tempId('msg'),
+      session_id: initialSid,
+      role: 'assistant',
+      content: '',
+      sections: [],
+      tool_calls: {},
+      created_at: new Date().toISOString(),
+    }
     set(s => {
       const existing = s.messagesBySession[initialSid] ?? []
       return {
         messagesBySession: { ...s.messagesBySession, [initialSid]: [...existing, userMsg] },
+        // 思考态占位：assistant 侧立刻冒「正在思考…」，乐观窗口（点发送→meta）不再只有孤零零的用户气泡
+        streamingBySession: { ...s.streamingBySession, [initialSid]: thinkingPlaceholder },
         status: 'submitting',
         error: null,
         currentProjectId: projectId,
@@ -431,6 +445,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 // 占位 sid → 真实 sid 迁移（新对话首次拿到 server 给的 sid）
                 let nextMessagesBySession = s.messagesBySession
                 let nextAbortBySession = s.abortBySession
+                let nextStreamingBySession = s.streamingBySession
                 if (!migratedFromTemp && realSid !== initialSid && initialSid.startsWith('sess_tmp_')) {
                   // 把 messagesBySession[initialSid]（user msg 暂存于此）迁移到 [realSid]
                   const tempMsgs = s.messagesBySession[initialSid] ?? []
@@ -441,6 +456,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   // ctrl 也迁移到 realSid
                   const { [initialSid]: ctrlGone, ...restAborts } = s.abortBySession
                   if (ctrlGone) nextAbortBySession = { ...restAborts, [realSid]: ctrlGone }
+                  // 删掉临时 sid 的「正在思考」占位（下面会在 realSid 下重建真 streaming，避免占位孤儿残留）
+                  const { [initialSid]: _streamGone, ...restStream } = s.streamingBySession
+                  nextStreamingBySession = restStream
                   migratedFromTemp = true
                 }
 
@@ -467,7 +485,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 return {
                   messagesBySession: nextMessagesBySession,
                   abortBySession: nextAbortBySession,
-                  streamingBySession: { ...s.streamingBySession, [realSid]: newStreaming },
+                  // 用 nextStreamingBySession（已删临时 sid 占位）再在 realSid 下建真 streaming；
+                  // 既有会话续问时 initialSid===realSid，这里直接覆盖同 key 的占位，无孤儿。
+                  streamingBySession: { ...nextStreamingBySession, [realSid]: newStreaming },
                   currentSessionId: isStillOnThisSession ? realSid : s.currentSessionId,
                   contextUsage: isStillOnThisSession && validCu ? (cu as ContextUsage) : s.contextUsage,
                 }

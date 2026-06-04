@@ -160,4 +160,25 @@ describe('chat store sendMessage 乐观渲染', () => {
     expect(headBlock).toContain("status: 'submitting'")
     expect(headBlock).toContain('currentSessionId: initialSid')   // ← 乐观渲染关键：不等 meta
   })
+
+  it("源码不变量：首段建空 streaming 占位（临时 sid）→ assistant 立即「正在思考」", () => {
+    const src = readFileSync('src/store/chat.ts', 'utf-8')
+    const smIdx = src.indexOf('sendMessage: async')
+    const ctrlIdx = src.indexOf('new AbortController()', smIdx)
+    const headBlock = src.slice(smIdx, ctrlIdx)
+    // 构造空 assistant 占位（同 meta 的 newStreaming 形态）并放进 streamingBySession[initialSid]
+    expect(headBlock).toContain("role: 'assistant'")
+    expect(headBlock).toContain('streamingBySession: { ...s.streamingBySession, [initialSid]: thinkingPlaceholder }')
+  })
+
+  it("源码不变量：case 'meta' 迁移时删除临时 sid 的 streaming 占位（不残留孤儿）", () => {
+    const src = readFileSync('src/store/chat.ts', 'utf-8')
+    const metaIdx = src.indexOf("case 'meta':")
+    const nextCaseIdx = src.indexOf("case 'tool_call':", metaIdx)
+    expect(metaIdx).toBeGreaterThan(-1)
+    const metaBlock = src.slice(metaIdx, nextCaseIdx)
+    // 迁移块剥掉 streamingBySession[initialSid]，再以 nextStreamingBySession 为基底在 realSid 下重建
+    expect(metaBlock).toContain('nextStreamingBySession')
+    expect(metaBlock).toContain('streamingBySession: { ...nextStreamingBySession, [realSid]: newStreaming }')
+  })
 })
