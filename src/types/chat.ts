@@ -74,8 +74,11 @@ export interface Section {
 export interface CallChainNode {
   /** 图内唯一 id（用于 edge 引用），建议 'n1' / 'n2' 等短串 */
   id: string
-  /** 节点显示文本 —— 用户在图上看到的字（方法短名 / 业务说明） */
+  /** 节点显示文本 —— 用户在图上看到的字（优先中文业务名；无解读时回退方法短名） */
   label: string
+  /** 英文代码标识（短类名.方法，如 'OmsPortalOrderServiceImpl.generateOrder'）。
+   *  与 label（中文）配合：上行英文代码、下行中文业务，治"节点空洞"。后端 render_call_graph 提供。 */
+  method?: string
   /** 节点角色，决定配色 / 图标；后端可不填，前端默认 'method' */
   kind?: 'controller' | 'service' | 'mapper' | 'method' | 'external'
   /** 类全限定名（如 'com.foo.UserController'），hover 时显示 */
@@ -287,6 +290,8 @@ export interface ToolCallPayload {
   result_preview?: string
   /** 渲染类工具（render_call_graph 等）complete 时携带：图数据，前端内联渲染（CallChainFlow）。 */
   render?: { kind: string; data: unknown }
+  /** 后端流式偏移：调工具时刻已 emit 的正文字符数。前端据此把图内联插到正确位置（而非末尾）。 */
+  at?: number
 }
 
 /**

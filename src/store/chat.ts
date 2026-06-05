@@ -507,18 +507,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               updateStream(sm => {
                 const tcs = { ...(sm.tool_calls || {}) }
                 const existing = tcs[payload.id] || { starting: payload }
+                // at 优先用后端给的流式偏移（调工具时刻的字符数，权威）；缺失时回退本地 raw_stream 长度。
+                // 后端本地都缺 → 末尾。修"调用图甩到最后"。
+                const atPos = typeof payload.at === 'number' ? payload.at : (sm.raw_stream || '').length
                 if (payload.phase === 'starting') {
-                  tcs[payload.id] = { ...existing, starting: payload }
-                } else {
-                  // complete：渲染类工具（payload.render 非空）→ 记录 render + 到达时 raw_stream 偏移 at，
-                  // 供 buildAnswerSegments 把调用图按位置内联进自由文本（设计 §5.3）
+                  // 渲染类工具（render_call_graph）：starting 即按 at 插一个「调用中」loading 占位（等待层），
+                  // 让用户在图生成期间看到"正在画调用图"，complete 时原位换成真图。
                   tcs[payload.id] = {
-                    ...existing,
-                    complete: payload,
-                    ...(payload.render != null
-                      ? { render: payload.render, at: (sm.raw_stream || '').length }
+                    ...existing, starting: payload,
+                    ...(payload.name === 'render_call_graph'
+                      ? { render: { kind: 'loading', data: null }, at: atPos }
                       : {}),
                   }
+                } else {
+                  // complete：有 render → 原位换真图；渲染类工具最终没出图（无调用边）→ 清掉 loading 占位。
+                  const next = { ...existing, complete: payload }
+                  if (payload.render != null) {
+                    next.render = payload.render
+                    next.at = atPos
+                  } else if (next.render && next.render.kind === 'loading') {
+                    delete next.render
+                    delete next.at
+                  }
+                  tcs[payload.id] = next
                 }
                 return { ...sm, tool_calls: tcs }
               })

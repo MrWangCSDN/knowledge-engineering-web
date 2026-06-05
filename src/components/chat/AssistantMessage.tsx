@@ -549,6 +549,13 @@ export function AssistantMessage({
                 seg.kind === 'render' && seg.renderKind === 'call_graph' ? (
                   // 内联调用图：复用 CallChainFlow（点击跳源码 / 文件名 tab / 方法置顶）
                   <CallChainFlow key={`r${i}`} data={seg.data as CallChainData} theme={theme} />
+                ) : seg.kind === 'render' && seg.renderKind === 'loading' ? (
+                  // 调用图生成中的「等待层」：按 at 内联占位，complete 后原位换成真图。
+                  // 配色走 token（border/muted/muted-foreground），light/dark 自动跟随。
+                  <div key={`l${i}`} className="my-2 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+                    正在生成调用图…
+                  </div>
                 ) : (
                   <ReactMarkdown key={`t${i}`} {...MD_REMARK_PROPS}>
                     {seg.kind === 'text' ? seg.content : ''}

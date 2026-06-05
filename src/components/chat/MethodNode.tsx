@@ -68,10 +68,10 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
   // 视觉密度跟 ChatGPT / Linear 工作流图对齐
   const displayLabel = data.label + (data.sig ?? '')
 
-  // 2026-06-03：短类名（去包名）—— 区分同名方法的不同分层
-  // （Controller.register / Service.register / Impl.register 在图上一眼分得清）；
-  // 完整全限定名仍在 title hover 里。仅在有 classOf 时显示这一行。
-  const shortClass = data.classOf ? data.classOf.split('.').pop() : ''
+  // 2026-06-05：英文代码标识行（class.method，如 OmsPortalOrderServiceImpl.generateOrder）。
+  // 与中文 label 配合——上行英文代码、下行中文业务动作，治"节点看着空洞"；
+  // 回退：后端没给 method 时用短类名（去包名）。完整全限定名仍在 title hover 里。
+  const codeLine = data.method || (data.classOf ? data.classOf.split('.').pop() : '')
 
   return (
     <div
@@ -101,9 +101,9 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
           （Controller/Service/Impl）一眼区分；完整全限定名仍在 hover tooltip。
           配色走 token（text-muted-foreground），light/dark 自动跟随，无硬编码色值 */}
       <div className="flex flex-col px-3 py-1.5">
-        {shortClass && (
+        {codeLine && (
           <span className="font-mono text-[10px] leading-tight text-muted-foreground truncate">
-            {shortClass}
+            {codeLine}
           </span>
         )}
         <div className="flex items-center gap-1.5">

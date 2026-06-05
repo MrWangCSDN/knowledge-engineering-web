@@ -190,7 +190,16 @@ describe('chat SSE tool_call 透传 render（agent 内联调用图）', () => {
     const j = src.indexOf("case 'token':", i)
     const block = src.slice(i, j)
     expect(block).toContain('render')        // 透传 render（渲染类工具的图数据）
-    expect(block).toContain('raw_stream')    // 记录到达时 raw_stream 偏移
+    expect(block).toContain('raw_stream')    // 回退：本地 raw_stream 偏移
     expect(block).toContain('at:')           // 偏移字段 at（有序段内联用）
+  })
+
+  it("case 'tool_call' 优先用后端 payload.at（修调用图甩到末尾）+ starting 插 loading 等待层", () => {
+    const i = src.indexOf("case 'tool_call':")
+    const j = src.indexOf("case 'token':", i)
+    const block = src.slice(i, j)
+    expect(block).toContain('payload.at')          // 优先用后端权威偏移
+    expect(block).toContain("'loading'")           // render_call_graph starting 时插 loading 占位
+    expect(block).toContain('render_call_graph')   // 仅渲染类工具才插占位
   })
 })
