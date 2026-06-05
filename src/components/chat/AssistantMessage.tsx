@@ -309,10 +309,6 @@ export function AssistantMessage({
 }: Props) {
   const sections = message.sections ?? []
   const hasSections = sections.length > 0
-  // 是否有 render_call_graph 工具产出的调用图 → 段内容里手画的 ```reactflow 要剥掉（去重，保留工具图）
-  const hasToolRender = Object.values(message.tool_calls || {}).some(
-    (tc) => tc.render?.kind === 'call_graph',
-  )
   // 主题：light / dark；mermaid 需要拿来挑 theme
   const theme = useThemeStore(s => s.theme)
   // v1.5 下载按钮的 loading 态（防止用户连点）
@@ -400,7 +396,9 @@ export function AssistantMessage({
             // 单段（chit-chat 或 agent 自由格式）跳过 h3 段头。
             // 不变量：后端结构化答案至少 2 段（overview + 其它），故"单段"必为自由格式/chit-chat。
             // 若将来后端会发单段的结构化答案，需改此判定。
-            const headerless = s.type === 'chit-chat' || sections.length === 1
+            // headerless：chit-chat / 单段 / 或后端 fold 标了 headerless（agent 自由输出折叠成多段，
+            // 这些段是一段连续叙述 + 内联图，不该出现「📌 回答」小节头）。
+            const headerless = s.type === 'chit-chat' || sections.length === 1 || s.headerless === true
             const icon = SECTION_ICONS[s.type] ?? '📌'
             const title = s.title || SECTION_TITLES[s.type] || s.type
             // v1.12（2026-06-02）：图渲染分流不再限定 call_chain 段，所有段都跑
@@ -418,9 +416,15 @@ export function AssistantMessage({
                 const parsedWhole = tryParseCallChain(s.content || '')
                 if (parsedWhole) return [{ type: 'react-flow', data: parsedWhole }]
               }
-              // (b) 其它情况一律走 fence 切片（含 reactflow / mermaid 两种 fence）
-              // 有工具调用图时，剥掉段内手画的 ```reactflow（去重；下方另有工具 render 块补渲染）
-              const body = hasToolRender ? stripReactflowFences(s.content || '') : (s.content || '')
+              // (b) 其它情况走 fence 切片（含 reactflow / mermaid 两种 fence）。
+              // 文本段（overview/chit-chat/agent 自由格式）无条件剥掉手画的"节点-边"图
+              // （```reactflow / ```mermaid graph|flowchart）——唯一画图出口是 render_call_graph 工具，
+              // 图已作为 call_chain 段注入，手画的一律去掉；sequence/ER 等非节点-边图被保留。
+              // **call_chain 段不剥**：它是专门的图槽（agent 路径=工具 JSON；6 段路径=LLM 的 mermaid 兜底），
+              // 此处的 mermaid graph 是合法图、要照常分流给 MermaidDiagram。
+              const body = s.type === 'call_chain'
+                ? (s.content || '')
+                : stripReactflowFences(s.content || '')
               return splitDiagramFences(body)
             })()
             return (
@@ -482,13 +486,9 @@ export function AssistantMessage({
               </div>
             )
           })}
-          {/* agent render_call_graph 工具产出的调用图：流式结束后答案已转 sections（raw_stream 删除），
-              在此据 tool_calls.render 补渲染，让图持久化（不随 raw_stream 消失）。设计 §5.3。 */}
-          {Object.values(message.tool_calls || {})
-            .filter((tc) => tc.render?.kind === 'call_graph')
-            .map((tc, ri) => (
-              <CallChainFlow key={`rb${ri}`} data={tc.render!.data as CallChainData} theme={theme} />
-            ))}
+          {/* 调用图已由后端 fold_render_sections 按 at 注入 sections 的 call_chain 段（持久化+有序），
+              上面 sections.map 顺序渲染即可——不再在末尾一股脑补图（治"图跳到答案最后"）。
+              设计 [[业务问答-reactflow御用画图工具-设计]] §四④。 */}
         </div>
       ) : streaming && message.raw_stream ? (
         // v1.6 token 流 + v1.8 markdown + v1.9 JSON 折叠

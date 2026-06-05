@@ -58,6 +58,11 @@ export interface Section {
    */
   content: string
   references?: Reference[]
+  /**
+   * 后端 fold_render_sections 折叠 agent 自由输出时标记：这些段是一段连续叙述 + 内联调用图，
+   * 不该显示「📌 标题」小节头（原本单段靠 sections.length===1 免头，折成多段后失效）。
+   */
+  headerless?: boolean
 }
 
 // ─── call_chain 段的 ReactFlow 数据结构（v1.11 接 ReactFlow，2026-06-02）─────
