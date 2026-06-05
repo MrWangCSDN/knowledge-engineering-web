@@ -20,15 +20,23 @@ export type AnswerSegment =
   | { kind: 'render'; data: unknown; renderKind: string }
 
 /**
- * 剥掉文本里手画的 ```reactflow fenced 块。
+ * 剥掉文本里手画的"调用图/流程图"代码块（```reactflow 与 ```mermaid 的 flowchart/graph）。
  *
  * 用途：当本条消息已有 render_call_graph 工具产出的调用图（render 块）时，LLM 偶尔仍会
- * 在自由文本里又手画一张 ```reactflow（提示词压不住的 LLM 习惯）。手画图边常臆造、且与工具图重复，
- * 故确定性地剥掉手画块，只保留准确的工具图。无工具图时不调用本函数（手画块作为唯一图保留）。
+ * 在自由文本里又手画一张图（提示词压不住的 LLM 习惯，~半数概率）——手画的边常臆造、且与工具图
+ * 重复，mermaid 还常因 `#(参数)` 等非法语法导致前端"解析失败"。故确定性剥掉手画的调用图块，
+ * 只保留准确的工具图。无工具图时不调用本函数（手画块作为唯一图来源保留）。
+ *
+ * 注意：只剥"节点-边"类（reactflow / mermaid flowchart|graph）——这类一律应走 render_call_graph；
+ * 保留 mermaid 的 sequenceDiagram / erDiagram / stateDiagram / gantt 等（工具画不了，仍需手画）。
  */
 export function stripReactflowFences(text: string): string {
-  // ```reactflow 到下一个 ``` 之间（含围栏）整体删除；[\s\S] 跨行，*? 非贪婪到最近的 ```
-  return (text || '').replace(/```reactflow[\s\S]*?```/g, '').replace(/\n{3,}/g, '\n\n').trim()
+  return (text || '')
+    // 1. 手画 reactflow 整块删（[\s\S] 跨行，*? 非贪婪到最近的 ```）
+    .replace(/```reactflow[\s\S]*?```/g, '')
+    // 2. 手画 mermaid 的 flowchart / graph（调用图/流程图）整块删；不动 sequence/er/state 等
+    .replace(/```mermaid\s*(?:flowchart|graph)\b[\s\S]*?```/gi, '')
+    .replace(/\n{3,}/g, '\n\n').trim()
 }
 
 /**

@@ -48,6 +48,15 @@ describe('buildAnswerSegments', () => {
     const segs = buildAnswerSegments(raw, {})              // 无 render
     expect((segs[0] as { content: string }).content).toContain('reactflow')
   })
+
+  it('既有工具 render 时，手画的 ```mermaid 调用图被剥掉（去重，治"解析失败"）', () => {
+    const raw = '说明：\n```mermaid\nflowchart TD\n  A-->B\n```\n结尾'
+    const tcs = { a: tc({ render: { kind: 'call_graph', data: { nodes: [] } }, at: raw.length }) }
+    const segs = buildAnswerSegments(raw, tcs)
+    const textJoined = segs.filter(s => s.kind === 'text').map(s => (s as { content: string }).content).join('')
+    expect(textJoined).not.toContain('flowchart')          // 手画 mermaid 调用图被剥
+    expect(segs.some(s => s.kind === 'render')).toBe(true)  // 工具图保留
+  })
 })
 
 describe('stripReactflowFences', () => {
@@ -59,5 +68,18 @@ describe('stripReactflowFences', () => {
   })
   it('无 reactflow 块原样返回', () => {
     expect(stripReactflowFences('正常文本')).toBe('正常文本')
+  })
+  it('剥掉手画 mermaid 调用图块（flowchart / graph）', () => {
+    const r = stripReactflowFences('前文\n```mermaid\nflowchart TD\n  A-->B\n```\n后文')
+    expect(r).not.toContain('flowchart')   // 手画 mermaid 调用图整体删（应走 render_call_graph 工具）
+    expect(r).toContain('前文')
+    expect(r).toContain('后文')
+  })
+  it('剥掉手画 mermaid graph LR 调用图块', () => {
+    expect(stripReactflowFences('x\n```mermaid\ngraph LR\n  A-->B\n```')).not.toContain('graph LR')
+  })
+  it('保留 mermaid 非调用图（sequenceDiagram 等，工具画不了）', () => {
+    const src = '说明\n```mermaid\nsequenceDiagram\n  A->>B: x\n```'
+    expect(stripReactflowFences(src)).toContain('sequenceDiagram')
   })
 })
