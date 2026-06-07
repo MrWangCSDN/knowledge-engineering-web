@@ -5,7 +5,7 @@
 // callees 调用点标成可点击装饰，点击 → openEntity 跳转。
 // 设计 [[代码片段查看器-设计]] §5。@monaco-editor/react 内部懒加载 Monaco。
 import '@/lib/monacoSetup'                                            // 自托管 Monaco（worker + loader.config），副作用导入；保证 Editor 首次渲染前已配置好
-import { useRef, useEffect } from 'react'                             // useRef：可变引用；useEffect：副作用（snippet 切换重新装饰 / reveal）
+import { useRef, useEffect, useState } from 'react'                   // useRef：可变引用；useEffect：副作用（snippet 切换重新装饰 / reveal）；useState：mount 就绪态
 import Editor, { type OnMount } from '@monaco-editor/react'           // Monaco 编辑器封装（使用 monacoSetup 注入的本地 monaco，不走 CDN）
 // 直接拿 Monaco 类型给 editor / monaco-namespace 用，避免 any
 // 仅类型导入（`import type`）不产生运行时代码，不影响 bundle
@@ -46,6 +46,12 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
   // 当前 editor 上挂着的所有 decoration id，下次更新 deltaDecorations(oldIds, newIds) 替换
   // 防止 callee + method-range 装饰每次 effect 跑都叠加
   const decoIdsRef = useRef<string[]>([])
+
+  // editor 是否已 mount 就绪：onMount 里置 true。
+  // 关键修复：useEffect([snippet]) 在首次打开时先于 Monaco 异步 mount 跑（此刻 editorRef=null → 早返回，
+  // 不装饰也不 reveal），而 onMount 只写 ref（可变引用不触发重渲染）→ effect 不会再跑 → 首开永远不滚动定位。
+  // 把 ready 纳入 effect 依赖：mount 后 setReady(true) 触发重渲染 → effect 再跑一次（此时 ref 已就绪）→ 装饰 + reveal 生效。
+  const [ready, setReady] = useState(false)
 
   // decoRef 记录「装饰坐标 → entityId」映射，onMouseDown 时按点击位置查找命中项
   const decoRef = useRef<{
@@ -111,9 +117,12 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
     // 3. 整文件视图：滚动让方法首行落到 viewport 顶部（用户偏好：方法置顶展示、body 在下方铺开，
     //    类似 IDE「跳转到定义」后方法顶在上沿）。revealLineNearTop 会留少量上边距（露出上方注解/签名）。
     if (useFullFile) {
-      editor.revealLineNearTop(snippet.start_line)
+      // rAF 等 Monaco 完成本帧布局再 reveal——刚 mount / 刚 setValue 时直接 reveal 常因视口高度未就绪而不滚动（卡在第 1 行）
+      const line = snippet.start_line
+      requestAnimationFrame(() => editor.revealLineNearTop(line))
     }
-  }, [snippet])
+    // 依赖含 ready：保证 Monaco mount 就绪后 effect 再跑一次（首开 reveal/装饰生效）
+  }, [snippet, ready])
 
   // ── 加载 / 错误 / 空态：不渲染 Monaco ─────────────────────────────────────
   if (loading) return <div className="p-4 text-sm text-muted-foreground">加载中…</div>
@@ -125,6 +134,8 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
     monacoRef.current = monaco
+    // 触发重渲染 → useEffect([snippet, ready]) 再跑一次（此时 ref 已就绪），让首次打开也能装饰 + reveal 定位
+    setReady(true)
 
     // 监听鼠标按下，命中 callee 装饰范围 → openEntity 跳转
     editor.onMouseDown((e: { target: { position: { lineNumber: number; column: number } | null } }) => {

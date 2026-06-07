@@ -42,10 +42,29 @@ describe('MonacoSnippet', () => {
  */
 describe('MonacoSnippet 定位策略（方法置顶）', () => {
   const src = readFileSync('src/components/code/MonacoSnippet.tsx', 'utf-8')
-  it('用 revealLineNearTop(start_line) 把方法滚到顶部', () => {
-    expect(src).toContain('editor.revealLineNearTop(snippet.start_line)')
+  it('用 revealLineNearTop 把方法滚到顶部', () => {
+    expect(src).toContain('revealLineNearTop(line)')
+    expect(src).toContain('snippet.start_line')
   })
   it('不再用 revealLineInCenter（居中）', () => {
     expect(src).not.toContain('revealLineInCenter')
+  })
+})
+
+/**
+ * 首开滚动定位修复（2026-06-07）：useEffect([snippet]) 首次在 Monaco mount 前跑（ref=null 早返回），
+ * onMount 只写 ref 不触发重渲染 → 首开永不 reveal。修复：ready 态纳入依赖 + onMount setReady(true) +
+ * rAF 等布局就绪再 reveal。沿用源码不变量手法守住。
+ */
+describe('MonacoSnippet 首开 reveal 定位修复', () => {
+  const src = readFileSync('src/components/code/MonacoSnippet.tsx', 'utf-8')
+  it('onMount 置 ready 触发 effect 再跑（首开也装饰+reveal）', () => {
+    expect(src).toContain('setReady(true)')
+  })
+  it('effect 依赖含 ready', () => {
+    expect(src).toContain('[snippet, ready]')
+  })
+  it('reveal 用 requestAnimationFrame 等布局就绪', () => {
+    expect(src).toContain('requestAnimationFrame(() => editor.revealLineNearTop(line))')
   })
 })
