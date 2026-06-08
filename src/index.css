@@ -377,3 +377,37 @@ body {
   border-left: 3px solid var(--ref-accent);
   margin-left: 2px;
 }
+
+/* ── Task 6（2026-06-08）：cmd/ctrl+click 落到无源码符号 → 弹"暂无源码" toast ──
+   颜色全部走 design token（--background / --foreground / --border / --muted-foreground）；
+   dark 模式自动跟随 token 切换，无需复制规则。CSS 已存在的 token 命名沿用。 */
+.cs-no-source-toast {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  /* translateX(-50%) 实现水平居中（位置无关父级宽度） */
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  /* color-mix 给背景一点透明感，让代码视觉不被完全遮挡 */
+  background: color-mix(in oklch, var(--background) 92%, transparent);
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.4;
+  /* 阴影走 design system 的 --shadow（若无则降级到弱阴影）；防 token 缺失时仍可读 */
+  box-shadow: 0 4px 12px color-mix(in oklch, var(--foreground) 8%, transparent);
+  /* 防止 toast 拦截 Monaco 鼠标事件（用户继续 hover 不应被这块挡住） */
+  pointer-events: none;
+  /* fade-in 动画（不依赖任何外部库；2026 浏览器普遍支持 @keyframes） */
+  animation: cs-toast-fade-in 160ms ease-out;
+  /* 防止其他全局规则越权改文字颜色 */
+  text-align: center;
+  /* 高 z-index 确保盖在 Monaco hover tooltip 之下、行高亮之上 */
+  z-index: 10;
+}
+
+@keyframes cs-toast-fade-in {
+  from { opacity: 0; transform: translate(-50%, 4px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}

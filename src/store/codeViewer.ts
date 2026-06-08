@@ -148,7 +148,8 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
     } catch (e) {
       // 从 AxiosError 中提取 HTTP 状态码；类型断言为宽松结构避免 ts 报错
       const status = (e as { response?: { status?: number } })?.response?.status
-      const msg = status === 404 ? '未找到该实体的源码' : '加载代码片段失败'
+      // 404 = 实体未入图 / 文件不可读：与 cmd-click 暂无源码 toast 同款用语，体感一致
+      const msg = status === 404 ? '暂无源码' : '加载代码片段失败'
       set(s => ({
         tabs: s.tabs.map(t =>
           t.entityId === entityId ? { ...t, loading: false, error: msg } : t

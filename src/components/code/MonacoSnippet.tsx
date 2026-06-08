@@ -87,6 +87,11 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
   // 把 ready 纳入 effect 依赖：mount 后 setReady(true) 触发重渲染 → effect 再跑一次（此时 ref 已就绪）→ 装饰 + reveal 生效。
   const [ready, setReady] = useState(false)
 
+  // cmd+click 落在无源码符号 → 弹一个 2.5s 自消失的 toast（暂无源码）。
+  // 用 setTimeout 自动清；连续点多次只覆盖最新一次的 timer。
+  const [noSourceToast, setNoSourceToast] = useState(false)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // decoRef 记录「装饰坐标 → entityId」映射，onMouseDown 时按点击位置查找命中项
   const decoRef = useRef<{
     start: { l: number; c: number }   // Monaco 坐标（1-indexed）
@@ -274,10 +279,19 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
     // 触发重渲染 → useEffect([snippet, ready]) 再跑一次（此时 ref 已就绪），让首次打开也能装饰 + reveal 定位
     setReady(true)
 
-    // 监听鼠标按下，命中 callee 装饰范围 → openEntity 跳转
-    editor.onMouseDown((e: { target: { position: { lineNumber: number; column: number } | null } }) => {
+    // 监听鼠标按下：cmd/ctrl+click → 任意符号跳转（Task 6）；无修饰键 → 维持原 callee 装饰跳转。
+    // Monaco IEditorMouseEvent 自带 event.metaKey / event.ctrlKey；本测试环境 jsdom 无 Monaco 实例不会跑到这里。
+    editor.onMouseDown((e: monacoT.editor.IEditorMouseEvent) => {
       const pos = e.target.position
       if (!pos) return
+      // mac=metaKey、win/linux=ctrlKey；两者任一命中即视为"IDE 跳转"修饰键
+      const cmdOrCtrl = e.event.metaKey || e.event.ctrlKey
+      if (cmdOrCtrl) {
+        // ── cmd/ctrl+click：调 resolveSymbol，按结果跳 entity 或弹"暂无源码" ──
+        void handleCmdClick(editor, pos)
+        return
+      }
+      // ── 无修饰键：维持原 callee 装饰跳转（设计 §4.2：现有 callee 装饰即点即跳零延迟）──
       const hit = decoRef.current.find(d =>
         pos.lineNumber === d.start.l &&
         (d.wholeLine || (pos.column >= d.start.c && pos.column <= d.end.c))
@@ -286,27 +300,85 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
     })
   }
 
+  /**
+   * cmd/ctrl+click 任意符号 → 通过 resolveSymbol 解析 → 跳转或弹"暂无源码" toast。
+   * 闭包内部用 snippetRef.current 读最新 snippet，规避 mount 时陈旧捕获。
+   */
+  async function handleCmdClick(
+    editor: monacoT.editor.IStandaloneCodeEditor,
+    pos: monacoT.Position,
+  ): Promise<void> {
+    const sn = snippetRef.current
+    if (!sn) return
+    const model = editor.getModel()
+    if (!model) return
+    // getWordAtPosition：非词位置（空白/标点）返 null → 静默退出
+    const word = model.getWordAtPosition(pos)
+    if (!word) return
+    // 编辑器行 → 文件绝对行：与 hover provider 同款换算
+    const useFullFile = !!sn.file_content
+    const fileLine = useFullFile
+      ? pos.lineNumber
+      : sn.start_line + pos.lineNumber - 1
+    const col = Math.max(0, pos.column - 1)
+    const projectId = useCodeViewerStore.getState().projectId
+    if (!projectId) return
+    try {
+      // want_doc=false：click 路径不要 signature/summary（少一次解读库往返）
+      const result = await resolveSymbol(projectId, {
+        file_path: sn.file_path,
+        line: fileLine,
+        col,
+        token: word.word,
+        context_entity_id: sn.entity_id,
+        want_doc: false,
+      })
+      if (!result) return                                     // 三级落空 → 静默（与 IDEA 同体感）
+      if (result.has_source) {
+        // 有源码 → 复用 openEntity（store 已有 IDEA 式同文件单 tab + reveal 定位）
+        await openEntity(result.entity_id)
+      } else {
+        // 暂无源码 → 弹 toast 2.5s
+        // 清掉旧 timer，避免连点多次后早先的 timer 提前隐藏 toast
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+        setNoSourceToast(true)
+        toastTimerRef.current = setTimeout(() => setNoSourceToast(false), 2500)
+      }
+    } catch {
+      // resolveSymbol 抛错（网络/鉴权）→ 静默；hover 路径同款 fail-soft
+    }
+  }
+
   // 整文件优先；fallback 方法片段
   // 整文件可能很大但 Monaco 自带 virtual rendering，10k+ 行也流畅
   const editorValue = snippet.file_content ?? snippet.code
 
+  // 外层 div 给 toast 提供 position: relative 锚点（Monaco 自身高度 100% 占满父容器）
+  // style 走内联是因为 Drawer 父级一定给了固定高度，外层 div 跟着撑满即可
   return (
-    <Editor
-      height="100%"
-      language={snippet.language}
-      value={editorValue}
-      theme={theme === 'dark' ? 'vs-dark' : 'vs'}
-      onMount={handleMount}
-      options={{
-        readOnly: true,
-        // 整文件视图启用 minimap（长文件导航）；方法片段视图关掉（节省空间）
-        minimap: { enabled: !!snippet.file_content, side: 'right' },
-        scrollBeyondLastLine: false,
-        fontSize: 13,
-        lineNumbersMinChars: 3,
-        // 整文件视图开 folding 让用户折叠其它方法
-        folding: !!snippet.file_content,
-      }}
-    />
+    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+      <Editor
+        height="100%"
+        language={snippet.language}
+        value={editorValue}
+        theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+        onMount={handleMount}
+        options={{
+          readOnly: true,
+          // 整文件视图启用 minimap（长文件导航）；方法片段视图关掉（节省空间）
+          minimap: { enabled: !!snippet.file_content, side: 'right' },
+          scrollBeyondLastLine: false,
+          fontSize: 13,
+          lineNumbersMinChars: 3,
+          // 整文件视图开 folding 让用户折叠其它方法
+          folding: !!snippet.file_content,
+        }}
+      />
+      {/* "暂无源码" toast：cmd+click 落到 JDK/三方/未索引符号时 2.5s 自消失。
+          颜色走 design token；index.css 里 .cs-no-source-toast 已定义 light/dark 两档。 */}
+      {noSourceToast && (
+        <div className="cs-no-source-toast" role="status">暂无源码</div>
+      )}
+    </div>
   )
 }

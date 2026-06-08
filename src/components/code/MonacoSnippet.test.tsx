@@ -30,8 +30,8 @@ describe('MonacoSnippet', () => {
     expect(screen.getByText(/加载中/)).toBeInTheDocument()
   })
   it('error → 错误文案', () => {
-    render(<MonacoSnippet snippet={null} error="未找到该实体的源码" theme="light" />)
-    expect(screen.getByText('未找到该实体的源码')).toBeInTheDocument()
+    render(<MonacoSnippet snippet={null} error="暂无源码" theme="light" />)
+    expect(screen.getByText('暂无源码')).toBeInTheDocument()
   })
 })
 
@@ -92,5 +92,27 @@ describe('MonacoSnippet IDE 化导航 — hover provider', () => {
   })
   it('has_source=false → 渲染"暂无源码"', () => {
     expect(src).toContain('暂无源码')
+  })
+})
+
+/**
+ * Task 6：cmd/ctrl+click 跳转任意符号 + 暂无源码 toast。
+ * 设计 [[代码查看器-IDE化导航-设计]] §4.2/§4.3。源码不变量手法。
+ */
+describe('MonacoSnippet IDE 化导航 — cmd/ctrl+click 跳转', () => {
+  const src = readFileSync('src/components/code/MonacoSnippet.tsx', 'utf-8')
+  it('检测 cmd/ctrl 修饰键（metaKey || ctrlKey）', () => {
+    expect(src).toMatch(/metaKey.*\|\|.*ctrlKey|ctrlKey.*\|\|.*metaKey/)
+  })
+  it('cmd+click 走 resolveSymbol（带 token + context_entity_id）', () => {
+    expect(src).toContain('resolveSymbol')
+    expect(src).toContain('context_entity_id')
+  })
+  it('has_source=true → openEntity 跳转', () => {
+    expect(src).toContain('openEntity(result.entity_id)')
+  })
+  it('has_source=false → toast 提示"暂无源码"', () => {
+    expect(src).toContain('setNoSourceToast(true)')
+    expect(src).toContain('cs-no-source-toast')
   })
 })

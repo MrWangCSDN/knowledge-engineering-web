@@ -74,7 +74,8 @@ describe('codeViewer store', () => {
     await useCodeViewerStore.getState().openEntity('Ghost::x#()')
     const t = useCodeViewerStore.getState().tabs[0]
     expect(t.loading).toBe(false)
-    expect(t.error).toBe('未找到该实体的源码')
+    // Task 6 起 404 文案统一为"暂无源码"（与 cmd-click toast 一致）
+    expect(t.error).toBe('暂无源码')
   })
 
   it('closeTab 移除 tab；移除激活 tab 回退最后一个；空则关抽屉', async () => {
