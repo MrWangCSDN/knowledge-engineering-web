@@ -42,3 +42,30 @@ export interface CodeSnippet {
   callees: CalleeRef[]
   callers: CallerRef[]
 }
+
+/**
+ * IDE 化光标解析端点 POST /code/resolve-symbol 的响应；命中返此对象、全落空返 null。
+ * 设计 [[代码查看器-IDE化导航-设计]] §4.1。
+ */
+export interface ResolvedSymbol {
+  /** 命中的实体持久 key（已做接口→impl 改写） */
+  entity_id: string
+  /** node.file_path 在磁盘上可读 → true；否则前端显示"暂无源码" */
+  has_source: boolean
+  /** 节点类型（method/class/interface 等；图原语降级时可能是 'unknown'） */
+  kind: string
+  /** hover 路径才填：节点 signature（method 才有，其它为 null） */
+  signature?: string | null
+  /** hover 路径才填：2b 解读首句；无解读时为 null */
+  summary?: string | null
+}
+
+/** POST /code/resolve-symbol 的请求体。所有字段直接转发后端 Pydantic 校验。 */
+export interface ResolveSymbolPayload {
+  file_path: string          // 必填：源文件相对路径
+  line: number               // 必填：光标行（1-indexed）
+  col: number                // 必填：光标列（0-indexed，与 Monaco UTF-16 一致）
+  token?: string | null      // 可选：光标处词（位置级落空时按名回退）
+  context_entity_id?: string | null  // 可选：当前查看实体 id（精度提升保留位）
+  want_doc?: boolean         // 可选：true → 附 signature + summary（hover 路径）
+}
