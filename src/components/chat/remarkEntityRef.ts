@@ -54,13 +54,35 @@ export function remarkEntityRef() {
 }
 
 /**
+ * 判断 url 是否像"qualified-name"实体 id：
+ *   - 含 `::`（Java 类/方法分隔符约定）
+ *   - 不是 http(s)/mailto 等已知 web 协议
+ *   - 不是已有 entity: 前缀
+ * 例：`OrderTimeOutCancelTask::cancelTimeOutOrder` / `Cls::m#(Long)` / `pkg.Cls::m`。
+ * 兜底场景：agent 偶尔不按 prompt 输出 `[entity_id|文本]`，改用标准 markdown `[文本](Cls::m)`，
+ * 此时 react-markdown 把 `Cls::m` 当 URL；浏览器看不懂 → about:blank#blocked。
+ */
+function looksLikeQualifiedName(url: string): boolean {
+  if (!url.includes('::')) return false                       // 必含 ::
+  if (url.startsWith('entity:')) return false                 // 已是 entity: scheme
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return false      // 已有 //-scheme（http:// / method:// 等）
+  if (/^(https?|mailto|tel|xmpp):/i.test(url)) return false   // 已知 web/通讯协议
+  return true
+}
+
+/**
  * react-markdown 的 urlTransform：默认只放行 https?/ircs?/mailto/xmpp，会把
  * remarkEntityRef 产出的 entity: url 清空。这里让 entity: 直接透传，其余仍走默认安全白名单。
  * AssistantMessage 的 <ReactMarkdown urlTransform={entityUrlTransform}> 必须用它，
  * 否则内联引用 href 为空、EntityRef 渲染不出来。
+ *
+ * 2026-06-08 加 qualified-name 兜底：agent 不按规范输出 `[文本](Cls::m)` 时，
+ * 把 `Cls::m` 转 `entity:Cls::m`，让 `a` handler 的 entity: 分支接住 → EntityRef → openEntity。
  */
 export function entityUrlTransform(url: string): string {
   if (url.startsWith('entity:')) return url
+  // 兜底：含 :: 且非已知 scheme → 当 qualified-name 实体 id 处理
+  if (looksLikeQualifiedName(url)) return `entity:${url}`
   const safeProtocol = /^(https?|ircs?|mailto|xmpp):/i
   try {
     const parsed = new URL(url)
