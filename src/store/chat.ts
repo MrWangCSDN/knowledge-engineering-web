@@ -30,6 +30,8 @@ import { getSessionDetail, voteMessage as apiVoteMessage } from '@/api/sessions'
 import { useSessionStore } from '@/store/sessions'
 import { useAuthStore } from '@/store/auth'
 import { useProjectStore } from '@/store/projects'
+// codeViewer：session 切换时关抽屉 + 清 tabs（设计：代码片段查看器跟随 session）
+import { useCodeViewerStore } from '@/store/codeViewer'
 import type {
   ChatStatus,
   Message,
@@ -178,9 +180,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       error: null,
       contextUsage: null,
     })
+    // 代码片段抽屉跟随 session：新对话没有代码上下文 → 关抽屉 + 清前一个 session 的 tabs
+    // 避免用户以为分屏代码是"当前新对话"的内容（用户实测反馈）
+    useCodeViewerStore.getState().resetForSessionChange()
   },
 
   loadSession: async (projectId: string, sessionId: string) => {
+    // 切到不同 session：先关代码片段抽屉 + 清前一个 session 的 tabs
+    // 当前未做 per-session tab 持久化，统一清理避免跨 session 串扰（与 startNew 同语义）
+    useCodeViewerStore.getState().resetForSessionChange()
     set({ status: 'submitting', error: null })
     try {
       const detail = await getSessionDetail(projectId, sessionId)

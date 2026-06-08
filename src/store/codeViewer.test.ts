@@ -88,6 +88,28 @@ describe('codeViewer store', () => {
     expect(useCodeViewerStore.getState().open).toBe(false)
   })
 
+  it('resetForSessionChange 关抽屉 + 清 tabs + 清激活 entity（session 切换跟随）', () => {
+    // 模拟"上个 session 打开了俩 tab、抽屉开着、a 激活"的状态
+    const mk = (id: string) => ({ entityId: id, snippet: null, loading: false, error: null })
+    useCodeViewerStore.setState({
+      open: true,
+      tabs: [mk('a'), mk('b')],
+      activeEntityId: 'a',
+      projectId: 'p',
+      width: 800,
+    })
+    // 触发 session 切换（新对话 / 切换 session）
+    useCodeViewerStore.getState().resetForSessionChange()
+    const st = useCodeViewerStore.getState()
+    // 抽屉关、tabs 清、激活 null
+    expect(st.open).toBe(false)
+    expect(st.tabs).toEqual([])
+    expect(st.activeEntityId).toBeNull()
+    // projectId / width 保留（前者是当前工程上下文，后者是用户偏好）
+    expect(st.projectId).toBe('p')
+    expect(st.width).toBe(800)
+  })
+
   it('setWidth 夹紧到 [320,1400]、NaN 回落默认 560、并持久化到 localStorage', () => {
     const st = () => useCodeViewerStore.getState()
     st().setWidth(800)                                                // 正常值

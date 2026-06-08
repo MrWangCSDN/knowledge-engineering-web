@@ -24,6 +24,11 @@ interface CodeViewerState {
   switchTab: (entityId: string) => void          // 手动切换 tab
   closeTab: (entityId: string) => void           // 关闭单个 tab
   close: () => void                              // 收起抽屉（不销毁 tabs）
+  /** Session 切换（新对话 / 切到别的 session）时调：关抽屉 + 清 tabs + 清激活 entity。
+   *  设计：代码片段查看器是 **session 级别**——抽屉跟着 session 走；切到没有代码上下文的 session
+   *  时不应残留前一个 session 的 tabs，避免误以为"这就是当前 session 的代码"。
+   *  projectId / width 保留：前者是工程上下文（与 session 同级），后者是用户偏好。 */
+  resetForSessionChange: () => void
   width: number                                  // 代码面板宽度（px）：可拖拽分隔条调整 + 持久化
   setWidth: (width: number) => void              // 设置面板宽度（夹紧到 [MIN,MAX] 并写 localStorage）
 }
@@ -177,6 +182,14 @@ export const useCodeViewerStore = create<CodeViewerState>((set, get) => ({
 
   // 收起抽屉（tabs 保留，重新 openEntity 时可直接复用）
   close: () => set({ open: false }),
+
+  // session 切换重置：关抽屉 + 清 tabs + 清激活 entity；保留 projectId / width
+  // 由 chat.startNew / chat.loadSession 调用，保证"代码片段查看器跟随 session"语义
+  resetForSessionChange: () => set({
+    open: false,
+    tabs: [],
+    activeEntityId: null,
+  }),
 
   // 设置面板宽度：夹紧到 [WIDTH_MIN, WIDTH_MAX] 后更新 store + 持久化
   setWidth: (width) => {
