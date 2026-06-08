@@ -10,9 +10,43 @@ import Editor, { type OnMount } from '@monaco-editor/react'           // Monaco 
 // 直接拿 Monaco 类型给 editor / monaco-namespace 用，避免 any
 // 仅类型导入（`import type`）不产生运行时代码，不影响 bundle
 import type * as monacoT from 'monaco-editor'
-import type { CodeSnippet } from '@/types/codeSnippet'                // 只引入类型（编译后无运行时代码）
+import type { CodeSnippet, ResolvedSymbol } from '@/types/codeSnippet'  // 只引入类型（编译后无运行时代码）
 import { computeCalleeDecorations } from './calleeDecorations'        // 调用点坐标换算纯函数
 import { useCodeViewerStore } from '@/store/codeViewer'              // Zustand store：openEntity 跳转
+import { resolveSymbol } from '@/api/codeSnippets'                   // IDE 化光标解析端点（hover + cmd-click 共用）
+
+// ─── Hover 缓存（模块级，跨 snippet 共享；按 projectId|file_path:line:col 键控） ───
+// 设计 [[代码查看器-IDE化导航-设计]] §4.2：hover 抖动同一位置不重复请求 resolveSymbol。
+// 模块级而非组件级：snippet 切换/抽屉关闭再开，同一位置的解读仍命中缓存（用户体验更顺）。
+// 大小 50：mall-swarm 类工程 hover 累计很少超过这个量；超出后按"插入顺序"驱逐最老一项（FIFO 近似 LRU）。
+const HOVER_CACHE_LIMIT = 50
+// Map 在 ES2015+ 保留插入顺序；keys().next() 取首个 key 即"最老"项
+const hoverCache = new Map<string, ResolvedSymbol | null>()
+
+/** LRU 读：命中则把该项重新插入到末尾（标记为最近使用）。 */
+function hoverCacheGet(key: string): ResolvedSymbol | null | undefined {
+  // has + get 分离：value 可能是 null（"全落空"也要缓存，避免重复查询）
+  // 用 has 判存在性，避免 null 被误当作"未缓存"
+  if (!hoverCache.has(key)) return undefined
+  const v = hoverCache.get(key) as ResolvedSymbol | null
+  // 删 + 重插：把命中项移到 Map 末尾（最新位置）；下次驱逐时它不会先被淘汰
+  hoverCache.delete(key)
+  hoverCache.set(key, v)
+  return v
+}
+
+/** LRU 写：超过容量时驱逐最老项（Map 的首个 key）。 */
+function hoverCacheSet(key: string, val: ResolvedSymbol | null): void {
+  // 已存在 → 先删后插，更新位置
+  if (hoverCache.has(key)) hoverCache.delete(key)
+  hoverCache.set(key, val)
+  // 超容驱逐：取首个 key（最老插入项）删除
+  if (hoverCache.size > HOVER_CACHE_LIMIT) {
+    const oldest = hoverCache.keys().next().value
+    if (oldest !== undefined) hoverCache.delete(oldest)
+  }
+}
+
 
 // ─── Props 类型定义 ───────────────────────────────────────────────────────────
 interface Props {
@@ -60,6 +94,17 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
     entityId: string
     wholeLine: boolean                // col 缺失的整行兜底项：点击该行任意列都算命中
   }[]>([])
+
+  // hoverProviderRef：保持 hover provider 的 dispose 句柄。组件卸载时 dispose；
+  //   切语言时也 dispose 旧的再注册新的（避免对同一 language 注册重复）。
+  // hoverLangRef：记录当前已注册的语言，与 snippet.language 比较决定是否要 re-register。
+  const hoverProviderRef = useRef<monacoT.IDisposable | null>(null)
+  const hoverLangRef = useRef<string | null>(null)
+
+  // snippetRef：让 hover provider 闭包总拿到最新 snippet（避免 stale closure）。
+  // 直接闭包捕获 snippet 会"冻"在 provider 注册那一刻的值；用 ref 每次读最新即可。
+  const snippetRef = useRef<CodeSnippet | null>(snippet)
+  useEffect(() => { snippetRef.current = snippet }, [snippet])
 
   // ── snippet 变化时（切 tab / 重新打开）重新装饰 + reveal ────────────────────
   // useEffect 监听 [snippet]，每次 snippet 引用变化触发：
@@ -123,6 +168,98 @@ export function MonacoSnippet({ snippet, loading = false, error = null, theme }:
     }
     // 依赖含 ready：保证 Monaco mount 就绪后 effect 再跑一次（首开 reveal/装饰生效）
   }, [snippet, ready])
+
+  // ── Hover provider 注册（设计 §4.2：签名+解读 tooltip + 暂无源码占位）─────────
+  // 策略：每个语言注册一次；snippet 语言变了 → dispose 旧的、注册新的；
+  //       provider 内部用 snippetRef.current 读最新 snippet，避免闭包陈旧。
+  useEffect(() => {
+    const monaco = monacoRef.current
+    if (!monaco || !snippet) return
+    // 同语言且已注册 → 跳过（防 effect 多次跑导致重复注册堆叠）
+    if (hoverLangRef.current === snippet.language && hoverProviderRef.current) return
+
+    // 切语言：先 dispose 旧 provider
+    hoverProviderRef.current?.dispose()
+    hoverProviderRef.current = null
+
+    // 注册新 provider：返 IDisposable，必须 dispose 才释放
+    hoverProviderRef.current = monaco.languages.registerHoverProvider(snippet.language, {
+      // provideHover 可返 Promise；Monaco 自带防抖、未 hover 时取消
+      provideHover: async (model, position) => {
+        // 闭包陷阱规避：每次调用都读 ref 的最新值
+        const sn = snippetRef.current
+        if (!sn) return null
+        // getWordAtPosition：返 { word, startColumn, endColumn } 或 null
+        // 非词位置（空白/标点）返 null → 无 token 可解析，直接退出
+        const word = model.getWordAtPosition(position)
+        if (!word) return null
+        // 编辑器行 → 文件绝对行：整文件视图行即文件行；方法片段视图加 start_line - 1 偏移
+        const useFullFile = !!sn.file_content
+        const fileLine = useFullFile
+          ? position.lineNumber
+          : sn.start_line + position.lineNumber - 1
+        // Monaco column 是 1-indexed，后端约定 0-indexed → 减 1
+        const col = Math.max(0, position.column - 1)
+        // projectId 从 store 取（非订阅，hover 异步路径里只读快照）
+        const projectId = useCodeViewerStore.getState().projectId
+        if (!projectId) return null
+
+        const cacheKey = `${projectId}|${sn.file_path}:${fileLine}:${col}`
+        // 缓存命中（包含已知为 null 的"全落空"，避免反复请求）
+        let result = hoverCacheGet(cacheKey)
+        if (result === undefined) {
+          // 未缓存 → 调后端；任何异常视为"无解析结果"，缓存 null 避免反复重试
+          try {
+            result = await resolveSymbol(projectId, {
+              file_path: sn.file_path,
+              line: fileLine,
+              col,
+              token: word.word,
+              context_entity_id: sn.entity_id,
+              want_doc: true,
+            })
+          } catch {
+            result = null
+          }
+          hoverCacheSet(cacheKey, result)
+        }
+
+        if (!result) return null
+
+        // ── tooltip markdown 渲染 ─────────────────────────────────────────────
+        // has_source=false：显式"暂无源码"占位（前端 IDE 体验：JDK/三方/未索引也有反馈）
+        // has_source=true：签名（code 块）+ summary（首句）；任一缺失就跳过
+        const parts: string[] = []
+        if (!result.has_source) {
+          parts.push('**暂无源码**')
+        } else {
+          if (result.signature) {
+            // 代码块包裹 signature → Monaco hover 自带 monospace 高亮
+            parts.push(`\`\`\`${sn.language}\n${result.signature}\n\`\`\``)
+          }
+          if (result.summary) {
+            parts.push(result.summary)
+          }
+        }
+        // 一行内容都没有（has_source=true 但无 signature/summary）→ 不弹 tooltip
+        if (parts.length === 0) return null
+        // contents 是 IMarkdownString[]，多段以双换行分隔（标准 markdown 段落）
+        return {
+          contents: parts.map(value => ({ value, isTrusted: false })),
+        }
+      },
+    })
+    hoverLangRef.current = snippet.language
+  }, [snippet, ready])
+
+  // ── 组件卸载清理：dispose hover provider（防泄漏 + 防多次切换/挂载叠加 provider）──
+  useEffect(() => {
+    return () => {
+      hoverProviderRef.current?.dispose()
+      hoverProviderRef.current = null
+      hoverLangRef.current = null
+    }
+  }, [])
 
   // ── 加载 / 错误 / 空态：不渲染 Monaco ─────────────────────────────────────
   if (loading) return <div className="p-4 text-sm text-muted-foreground">加载中…</div>

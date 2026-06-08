@@ -68,3 +68,29 @@ describe('MonacoSnippet 首开 reveal 定位修复', () => {
     expect(src).toContain('requestAnimationFrame(() => editor.revealLineNearTop(line))')
   })
 })
+
+/**
+ * Task 5：Monaco HoverProvider（签名+解读悬浮 + 暂无源码占位）。
+ * 设计 [[代码查看器-IDE化导航-设计]] §4.2。
+ * 沿用源码不变量手法：vitest 不真渲染 Monaco，所以行为靠模式串守住。
+ */
+describe('MonacoSnippet IDE 化导航 — hover provider', () => {
+  const src = readFileSync('src/components/code/MonacoSnippet.tsx', 'utf-8')
+  it('注册 Monaco HoverProvider', () => {
+    expect(src).toContain('registerHoverProvider')
+  })
+  it('hover 走 resolveSymbol API（want_doc=true）', () => {
+    expect(src).toContain('resolveSymbol')
+    expect(src).toContain('want_doc: true')
+  })
+  it('用 ref 持 hover provider，避免重复注册', () => {
+    expect(src).toContain('hoverProviderRef')
+  })
+  it('有 LRU 缓存（key 含 file_path:line:col）', () => {
+    expect(src).toMatch(/hoverCache|HOVER_CACHE/)
+    expect(src).toContain('file_path')
+  })
+  it('has_source=false → 渲染"暂无源码"', () => {
+    expect(src).toContain('暂无源码')
+  })
+})
