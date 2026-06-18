@@ -96,6 +96,8 @@ export interface CallChainNode {
   lineNumber?: number
   /** entity_id（含 scheme），让点击节点能复用 EntityRef 跳转链路 */
   entityId?: string
+  /** S3：注释假死 bean → true（仅后端判定为真时出现）；前端据此灰化节点。 */
+  is_disabled?: boolean
 }
 
 /**
@@ -107,6 +109,8 @@ export interface CallChainEdge {
   to: string
   /** 边上显示的中文业务动作；可选 */
   label?: string
+  /** S3：跨服务（Feign/RestTemplate/MQ）虚线边 → true；前端据此画专属色虚线。 */
+  virtual?: boolean
 }
 
 /** 整张调用图 = nodes + edges */

@@ -20,6 +20,11 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
 import type { CallChainNode } from '@/types/chat'
 import { EntityRef } from './EntityRef'
+import {
+  DISABLED_ACCENT,
+  DISABLED_BADGE_TEXT,
+  DISABLED_OPACITY,
+} from './callGraphSignals'
 
 // ReactFlow v12 的 Node<T> 类型 *要求* T 满足 `Record<string, unknown>` 索引签名。
 // CallChainNode 是 interface（具名字段），不直接满足；用 intersection 包一层
@@ -56,7 +61,9 @@ const KIND_ICON: Record<NonNullable<CallChainNode['kind']>, string> = {
 export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
   // kind 没填默认 'method'
   const kind = data.kind ?? 'method'
-  const accent = KIND_COLOR[kind]
+  // S3：注释假死 bean → 灰化（去色 accent + 虚框 + 降透明 + 「未启用」徽章）
+  const disabled = !!data.is_disabled
+  const accent = disabled ? DISABLED_ACCENT : KIND_COLOR[kind]
   const icon = KIND_ICON[kind]
 
   // hover 完整提示（title 属性 → 浏览器原生 tooltip）
@@ -82,6 +89,7 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
       className={`
         relative min-w-[200px] max-w-[260px]
         rounded-md border border-border bg-card
+        ${disabled ? 'border-dashed' : ''}
         shadow hover:shadow-lg transition-all duration-150
         ${selected ? 'ring-2 ring-[var(--ref-accent)] ring-offset-1' : ''}
       `}
@@ -100,7 +108,11 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
       {/* 2026-06-03：恢复类名行但用「短类名」(去包名) + text-[10px]，让同名方法的不同层
           （Controller/Service/Impl）一眼区分；完整全限定名仍在 hover tooltip。
           配色走 token（text-muted-foreground），light/dark 自动跟随，无硬编码色值 */}
-      <div className="flex flex-col px-3 py-1.5">
+      <div
+        className="flex flex-col px-3 py-1.5"
+        // 禁用：内容降透明（徽章在此 div 外、保持全透明可读）
+        style={disabled ? { opacity: DISABLED_OPACITY } : undefined}
+      >
         {codeLine && (
           <span className="font-mono text-[10px] leading-tight text-muted-foreground truncate">
             {codeLine}
@@ -123,6 +135,19 @@ export function MethodNode({ data, selected }: NodeProps<MethodFlowNode>) {
           )}
         </div>
       </div>
+      {/* S3：注释假死徽章。颜色走 token（muted），light/dark 自动跟随；不降透明保证可读 */}
+      {disabled && (
+        <span
+          className="absolute -top-2 -right-1.5 rounded-full border px-1.5 text-[10px] leading-tight"
+          style={{
+            color: 'var(--muted-foreground)',
+            borderColor: 'var(--muted-foreground)',
+            background: 'var(--muted)',
+          }}
+        >
+          {DISABLED_BADGE_TEXT}
+        </span>
+      )}
     </div>
   )
 }
