@@ -109,6 +109,7 @@
   --status-progress: oklch(0.75 0.15 85);    /* 琥珀 */
   --status-done: oklch(0.58 0.15 150);       /* 绿 */
   --ref-accent: oklch(0.55 0.17 250);        /* 引用蓝 */
+  --edge-virtual: oklch(0.52 0.19 295);      /* 紫 —— 跨服务虚线边（与 kind 蓝/绿/琥珀/灰都不撞） */
 
   /* 代码片段抽屉阴影（宪法：阴影分主题）。light：常规投影 */
   --drawer-shadow: 0 20px 25px -5px oklch(0 0 0 / 0.18), 0 8px 10px -6px oklch(0 0 0 / 0.14);
@@ -173,6 +174,7 @@
   --status-progress: oklch(0.82 0.14 85);
   --status-done: oklch(0.72 0.15 150);
   --ref-accent: oklch(0.70 0.15 250);
+  --edge-virtual: oklch(0.72 0.16 295);      /* 紫，dark 提亮一档防脏块 */
 
   /* 暗色：浅阴影在深底不可见 → 用更深投影 + 微亮描边做右边界层次 */
   --drawer-shadow: 0 0 0 1px oklch(1 0 0 / 0.08), 0 20px 40px -8px oklch(0 0 0 / 0.6);
@@ -218,6 +220,7 @@
   --color-status-progress: var(--status-progress);
   --color-status-done: var(--status-done);
   --color-ref-accent: var(--ref-accent);
+  --color-edge-virtual: var(--edge-virtual);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
