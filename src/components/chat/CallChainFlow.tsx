@@ -47,6 +47,7 @@ import { Maximize2, Minimize2, ImageDown } from 'lucide-react'
 
 import type { CallChainData } from '@/types/chat'
 import { MethodNode, type MethodFlowNode } from './MethodNode'
+import { edgeVisual } from './callGraphSignals'
 
 // 注册节点 type：'method' → MethodNode 组件
 // nodeTypes 必须用 useMemo 或模块级常量，否则每次 render 都新对象 → ReactFlow 警告
@@ -158,24 +159,29 @@ function CallChainFlowInner({ data, theme = 'light' }: Props) {
 
     // 2. 边：CallChainEdge → ReactFlow Edge
     //    用 smoothstep 圆角折线（比 bezier 视觉更清晰），加箭头 marker
-    const rfEdges: Edge[] = data.edges.map((e, i) => ({
-      id: `e-${i}`,
-      source: e.from,
-      target: e.to,
-      label: e.label,
-      type: 'smoothstep',
-      // 边末端加三角箭头；箭头颜色和边一致
-      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--muted-foreground)' },
-      // 边线颜色 + 宽度 —— 走 design token；label 字体 + 背景框
-      // 2026-06-02 美化：label padding 加厚 (4,2)→(8,4) 防文字贴边；
-      // background 改成 card 色，对比度比 background 更清晰；
-      // 边线 strokeWidth 1.5 → 1.2 更细更优雅
-      style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.2 },
-      labelStyle: { fontSize: 11, fontFamily: 'inherit', fill: 'var(--foreground)', fontWeight: 500 },
-      labelBgStyle: { fill: 'var(--card)', stroke: 'var(--border)', strokeWidth: 0.5 },
-      labelBgPadding: [8, 4] as [number, number],
-      labelBgBorderRadius: 6,
-    }))
+    // S3：virtual（跨服务）→ --edge-virtual 虚线，否则 muted 实线（现状）
+    const rfEdges: Edge[] = data.edges.map((e, i) => {
+      const ev = edgeVisual(e)
+      return {
+        id: `e-${i}`,
+        source: e.from,
+        target: e.to,
+        label: e.label,
+        type: 'smoothstep',
+        // 边末端加三角箭头；箭头颜色和边一致
+        markerEnd: { type: MarkerType.ArrowClosed, color: ev.markerColor },
+        // 边线颜色 + 宽度 —— 走 design token；label 字体 + 背景框
+        style: {
+          stroke: ev.stroke,
+          strokeWidth: 1.2,
+          ...(ev.strokeDasharray ? { strokeDasharray: ev.strokeDasharray } : {}),
+        },
+        labelStyle: { fontSize: 11, fontFamily: 'inherit', fill: 'var(--foreground)', fontWeight: 500 },
+        labelBgStyle: { fill: 'var(--card)', stroke: 'var(--border)', strokeWidth: 0.5 },
+        labelBgPadding: [8, 4] as [number, number],
+        labelBgBorderRadius: 6,
+      }
+    })
 
     // 3. dagre 重排
     const layouted = layoutWithDagre(rfNodes, rfEdges, 'LR')
@@ -314,6 +320,10 @@ function CallChainFlowInner({ data, theme = 'light' }: Props) {
           zoomable
           maskColor="var(--background)"
           nodeColor={(n) => {
+            // S3：禁用节点（注释假死）minimap 也走 muted，和主图一致
+            if ((n.data as { is_disabled?: boolean })?.is_disabled) {
+              return 'var(--muted-foreground)'
+            }
             // minimap 内节点配色按 kind 走（保持视觉一致）
             const k = (n.data as { kind?: string })?.kind
             switch (k) {
