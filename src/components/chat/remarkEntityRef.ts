@@ -78,11 +78,22 @@ function looksLikeQualifiedName(url: string): boolean {
  *
  * 2026-06-08 加 qualified-name 兜底：agent 不按规范输出 `[文本](Cls::m)` 时，
  * 把 `Cls::m` 转 `entity:Cls::m`，让 `a` handler 的 entity: 分支接住 → EntityRef → openEntity。
+ *
+ * 2026-06-20 加 ke-scheme 兜底：agent 还会写成 markdown 链接 `[文本](method://Cls::m)`（带 `://` scheme）。
+ * 这种 URL 既不被 ENTITY_RE 接（无竖线），又被 looksLikeQualifiedName 排除（它故意跳过 `://`），
+ * 之前 → `<a href="method://...">` 死链 → 点击 about:blank#blocked。这里把 method/class/table/doc
+ * 这几个 ke 实体 scheme 也转成 `entity:`（后端 _resolve 会剥 `://` scheme，照常命中）。
  */
+// ke 实体引用 scheme（与 AGENT_SYSTEM_PROMPT / 后端 entity_id 约定一致）；
+// 仅这几个转 entity:，不碰 http(s)/mailto 等 web 协议。
+const KE_ENTITY_SCHEME_RE = /^(method|class|table|doc):\/\//i
+
 export function entityUrlTransform(url: string): string {
   if (url.startsWith('entity:')) return url
   // 兜底：含 :: 且非已知 scheme → 当 qualified-name 实体 id 处理
   if (looksLikeQualifiedName(url)) return `entity:${url}`
+  // 兜底2：markdown 链接位置的 ke 实体 scheme（method:// 等）→ entity:
+  if (KE_ENTITY_SCHEME_RE.test(url)) return `entity:${url}`
   const safeProtocol = /^(https?|ircs?|mailto|xmpp):/i
   try {
     const parsed = new URL(url)

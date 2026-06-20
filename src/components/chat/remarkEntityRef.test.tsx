@@ -37,6 +37,15 @@ describe('remarkEntityRef', () => {
     expect(screen.getByText('甲').getAttribute('data-href')).toBe('entity:class://A')
     expect(screen.getByText('乙').getAttribute('data-href')).toBe('entity:method://b')
   })
+
+  it('agent 用 markdown 链接形式 [文本](method://...) 也能转 entity:（不再 about:blank#blocked）', () => {
+    // 线上真实复现：agent 偶尔写成 markdown 链接 [文本](method://Cls::m) 而非规范 [method://Cls::m|文本]。
+    // 这种 URL 既不被 ENTITY_RE 接（无竖线），又被 looksLikeQualifiedName 排除（有 ://），
+    // 修复前 → <a href="method://..."> 死链 → 点击 about:blank#blocked。
+    md('查询分类 [分类查询](method://PmsProductCategoryController::getItem) 实现')
+    expect(screen.getByText('分类查询').getAttribute('data-href'))
+      .toBe('entity:method://PmsProductCategoryController::getItem')
+  })
 })
 
 describe('entityUrlTransform 安全白名单', () => {
@@ -59,6 +68,17 @@ describe('entityUrlTransform 安全白名单', () => {
       .toBe('entity:PortalOrderDao::updateOrderStatus#()')
     expect(entityUrlTransform('com.foo.OmsServiceImpl::generateOrder#(OrderParam)'))
       .toBe('entity:com.foo.OmsServiceImpl::generateOrder#(OrderParam)')
+  })
+
+  it('兜底2：把 ke 实体 scheme 的 markdown 链接 URL（method:// 等）转成 entity:', () => {
+    // agent 写成 markdown 链接 [文本](method://Cls::m)：URL 带 :// scheme，
+    // 既不被 ENTITY_RE 接（无竖线）、又被 looksLikeQualifiedName 排除（有 ://）。
+    // 必须单独把 method/class/table/doc 这几个 ke scheme 转 entity:，否则点击 about:blank#blocked。
+    expect(entityUrlTransform('method://PmsProductCategoryController::getItem'))
+      .toBe('entity:method://PmsProductCategoryController::getItem')
+    expect(entityUrlTransform('class://com.foo.Bar')).toBe('entity:class://com.foo.Bar')
+    expect(entityUrlTransform('table://oms_order')).toBe('entity:table://oms_order')
+    expect(entityUrlTransform('doc://some/doc')).toBe('entity:doc://some/doc')
   })
 
   it('已有 entity: 已经被识别，不要双重前缀', () => {
