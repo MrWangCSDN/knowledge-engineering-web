@@ -1,6 +1,7 @@
+import { act } from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MainHeader } from './MainHeader'
 import { useProjectStore } from '@/store/projects'
 
@@ -10,18 +11,32 @@ vi.mock('@/config/features', () => ({ isProjectStatusEnabled: () => true }))
 // MainHeader useEffect 会调 listVisibleGroups()/groups api；mock 成空数组避免真实 HTTP
 vi.mock('@/api/groups', () => ({ listVisibleGroups: () => Promise.resolve([]) }))
 
-function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/project/:projectId" element={<MainHeader />} />
-      </Routes>
-    </MemoryRouter>,
-  )
+beforeEach(() => {
+  localStorage.clear()
+  useProjectStore.setState({
+    projects: [],
+    currentProjectId: null,
+    isLoading: false,
+    error: null,
+  })
+})
+
+async function renderAt(path: string) {
+  let result!: ReturnType<typeof render>
+  await act(async () => {
+    result = render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/project/:projectId" element={<MainHeader />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  })
+  return result
 }
 
 describe('MainHeader 工程状态徽章', () => {
-  it('非 ready 当前工程 → 顶栏出现徽章', () => {
+  it('非 ready 当前工程 → 顶栏出现徽章', async () => {
     useProjectStore.setState({
       projects: [{
         id: 'p1', name: 'mall-swarm', status: 'indexing',
@@ -30,7 +45,7 @@ describe('MainHeader 工程状态徽章', () => {
       }],
       currentProjectId: 'p1',
     })
-    renderAt('/project/p1')
+    await renderAt('/project/p1')
     expect(screen.getByText('索引中')).not.toBeNull()
   })
 })
