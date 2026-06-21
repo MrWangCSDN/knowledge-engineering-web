@@ -29,4 +29,14 @@ describe('CurrentProjectStatus', () => {
     const { container } = render(<CurrentProjectStatus project={undefined} enabled />)
     expect(container.textContent).toBe('')
   })
+
+  it('flag 开 + partial → 出徽章"解读 0%"', () => {
+    render(<CurrentProjectStatus project={mk({ status: 'partial' })} enabled />)
+    expect(screen.getByText('解读 0%')).not.toBeNull()
+  })
+
+  it('flag 开 + failed → 出徽章"失败"', () => {
+    render(<CurrentProjectStatus project={mk({ status: 'failed' })} enabled />)
+    expect(screen.getByText('失败')).not.toBeNull()
+  })
 })
