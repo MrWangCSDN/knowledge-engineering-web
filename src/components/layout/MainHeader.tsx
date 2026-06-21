@@ -21,7 +21,9 @@ import {
 import { UserMenu } from '@/components/auth/UserMenu'
 import { GroupTreeSelector } from '@/components/group/GroupTreeSelector'
 import { CurrentProjectStatus } from '@/components/project/CurrentProjectStatus'
+import { ReadyToast } from '@/components/project/ReadyToast'
 import { isProjectStatusEnabled } from '@/config/features'
+import { useProjectReadyPolling } from '@/hooks/useProjectReadyPolling'
 import { useProjectStore } from '@/store/projects'
 import { listVisibleGroups } from '@/api/groups'
 import type { Group } from '@/types/group'
@@ -45,6 +47,20 @@ export function MainHeader() {
 
   // 控制 DropdownMenu 的开关状态（受控，方便选择后自动关闭）
   const [open, setOpen] = useState(false)
+
+  // 「转 ready」提示 toast 的显隐：转 ready 时置 true，2.5s 后由 setTimeout 自动关
+  const [readyToast, setReadyToast] = useState(false)
+
+  // 当前工程非 ready 且 flag 开时周期重拉 /projects；检测到 非ready→ready 弹一次 toast
+  useProjectReadyPolling(
+    currentProject?.id,
+    currentProject?.status,
+    isProjectStatusEnabled(),
+    () => {
+      setReadyToast(true)
+      setTimeout(() => setReadyToast(false), 2500)
+    },
+  )
 
   // 拉取当前用户可见的 Group 列表（挂载时一次，后续由业务需要触发）
   useEffect(() => {
@@ -117,6 +133,9 @@ export function MainHeader() {
         </button>
         <UserMenu />
       </div>
+
+      {/* 「转 ready」提示：fixed 定位脱离 header 流，visible=false 时组件自身返 null */}
+      <ReadyToast visible={readyToast} projectName={currentProject?.name ?? ''} />
     </header>
   )
 }
