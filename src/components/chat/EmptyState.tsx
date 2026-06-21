@@ -60,7 +60,8 @@ export function EmptyState({ project, onSend, loading, onAbort }: Props) {
         </div>
 
         {/* 工程统计：极小一行（不抢眼）。
-            措辞修复：删掉无条件"正在分析"（ready 工程并不在分析），只展示纯统计。 */}
+            措辞修复：删掉无条件的"正在分析"与"解读 X%"后缀（后者在 backend 填真值前恒为脏 0%、有误导）；
+            解读进度仅在 flag 开 + partial 时作为失真警示显示 */}
         <p className="mt-4 text-[13px] text-muted-foreground/80 text-center">
           <span className="font-medium text-foreground/80">{project.name}</span>
           {' · '}
