@@ -17,6 +17,7 @@ import { ChevronRight, ChevronDown, FolderOpen, FolderClosed, Layers } from 'luc
 
 import type { Group } from '@/types/group'
 import type { Project } from '@/types/project'
+import { StatusChip } from '@/components/project/StatusChip'
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -224,30 +225,11 @@ function ProjectRow({ project, currentProjectId, onSelect, depth }: ProjectRowPr
 
       {/* 状态角标：只展示非 ready 状态 */}
       {project.status !== 'ready' && (
-        <StatusChip status={project.status} />
+        <span className="ml-auto">
+          <StatusChip status={project.status} />
+        </span>
       )}
     </button>
-  )
-}
-
-// ─── StatusChip ───────────────────────────────────────────────────────────────
-
-/**
- * 工程状态小徽章（与 ProjectStatusBadge 独立，这里只展示文字标签）。
- * 颜色全走 Tailwind 语义化 + dark variant，无硬编码。
- */
-function StatusChip({ status }: { status: Project['status'] }) {
-  const map: Record<Project['status'], { label: string; cls: string }> = {
-    ready: { label: '就绪', cls: 'bg-green-500/15 text-green-700 dark:text-green-400' },
-    indexing: { label: '索引中', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
-    partial: { label: '部分', cls: 'bg-orange-500/15 text-orange-700 dark:text-orange-400' },
-    failed: { label: '失败', cls: 'bg-red-500/15 text-red-700 dark:text-red-400' },
-  }
-  const { label, cls } = map[status]
-  return (
-    <span className={`ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded ${cls}`}>
-      {label}
-    </span>
   )
 }
 

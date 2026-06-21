@@ -9,6 +9,10 @@
  */
 import type { Project } from '@/types/project'
 import { ChatInput } from './ChatInput'
+// feature flag：工程状态指示总开关；关时本组件除"措辞修复"外完全等于现状
+import { isProjectStatusEnabled } from '@/config/features'
+// gating 纯函数：决定是否禁用提问 + 禁用占位文案
+import { isQAGated, gatedPlaceholder } from '@/lib/projectGating'
 
 const SAMPLE_QUESTIONS = [
   '存款开户的设计逻辑',
@@ -24,14 +28,19 @@ interface Props {
 }
 
 export function EmptyState({ project, onSend, loading, onAbort }: Props) {
+  // flag 关时 flagOn=false → gated 永远 false → 行为完全等于现状（除措辞修复）
+  const flagOn = isProjectStatusEnabled()
+  // gated：仅 flag 开 + 状态为 indexing/failed 时禁用提问
+  const gated = flagOn && isQAGated(project.status)
+
   return (
     // 跟随 GPT 风格：内容靠上而不是垂直居中
     // pt-[22vh] 让欢迎语 + 输入框落在屏幕上 1/3 处
     <div className="h-full flex flex-col items-center px-4 pt-[22vh]">
       <div className="w-full max-w-3xl flex flex-col items-center">
-        {/* 欢迎语：3xl + medium，跟 GPT 同档 */}
+        {/* 欢迎语：3xl + medium，跟 GPT 同档；gated 时改提示"暂未就绪" */}
         <h1 className="text-[28px] md:text-[32px] font-medium tracking-tight text-foreground text-center mb-7 leading-tight">
-          准备好了，随时问我
+          {gated ? `[${project.name}] 暂未就绪` : '准备好了，随时问我'}
         </h1>
 
         {/* 居中输入框 */}
@@ -40,19 +49,32 @@ export function EmptyState({ project, onSend, loading, onAbort }: Props) {
             onSend={onSend}
             loading={loading}
             onAbort={onAbort}
-            placeholder={`关于 [${project.name}] 你想了解什么？`}
+            disabled={gated}
+            placeholder={
+              gated
+                ? gatedPlaceholder(project.status)
+                : `关于 [${project.name}] 你想了解什么？`
+            }
             large
           />
         </div>
 
-        {/* 工程统计：极小一行（不抢眼） */}
+        {/* 工程统计：极小一行（不抢眼）。
+            措辞修复：删掉无条件的"正在分析"与"解读 X%"后缀（后者在 backend 填真值前恒为脏 0%、有误导）；
+            解读进度仅在 flag 开 + partial 时作为失真警示显示 */}
         <p className="mt-4 text-[13px] text-muted-foreground/80 text-center">
-          正在分析 <span className="font-medium text-foreground/80">{project.name}</span>
+          <span className="font-medium text-foreground/80">{project.name}</span>
           {' · '}
           {project.stats.methods_count} 方法
-          {' · '}
-          解读 {project.stats.interpretation_progress}%
         </p>
+
+        {/* partial 失真警示：仅 flag 开 + 解读未完成时显示，橙色提醒回答可能不完整。
+            light/dark 都用 token 化的橙色（text-orange-600 / dark:text-orange-400）。 */}
+        {flagOn && project.status === 'partial' && (
+          <p className="mt-1 text-[13px] text-orange-600 dark:text-orange-400 text-center">
+            解读 {project.stats.interpretation_progress}%（进行中，回答可能不完整）
+          </p>
+        )}
 
         {/* 示例 chips：横向小胶囊 */}
         <div className="mt-6 flex flex-wrap gap-2 justify-center">
