@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { UserMenu } from '@/components/auth/UserMenu'
 import { GroupTreeSelector } from '@/components/group/GroupTreeSelector'
+import { CurrentProjectStatus } from '@/components/project/CurrentProjectStatus'
+import { isProjectStatusEnabled } from '@/config/features'
 import { useProjectStore } from '@/store/projects'
 import { listVisibleGroups } from '@/api/groups'
 import type { Group } from '@/types/group'
@@ -99,6 +101,8 @@ export function MainHeader() {
 
       {/* ─── 右侧操作区 ─── */}
       <div className="ml-auto flex items-center gap-1">
+        {/* 当前工程状态徽章：flag 关 / 无工程 / ready 时组件自身返 null */}
+        <CurrentProjectStatus project={currentProject} enabled={isProjectStatusEnabled()} />
         <button
           type="button"
           aria-label="通知"
