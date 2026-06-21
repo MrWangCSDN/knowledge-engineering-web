@@ -31,6 +31,24 @@ describe('ProjectStatusDetail', () => {
     expect(screen.queryByText(/分钟/)).toBeNull()
   })
 
+  it('indexing eta 负数：不显示分钟', () => {
+    render(<ProjectStatusDetail project={mk({
+      status: 'indexing',
+      indexing_progress: { phase: 'parsing', percent: 0, eta_seconds: -60 },
+    })} />)
+    expect(screen.queryByText(/分钟/)).toBeNull()
+  })
+
+  it('indexing：显示索引进度 percent（非 interpretation_progress）', () => {
+    render(<ProjectStatusDetail project={mk({
+      status: 'indexing',
+      stats: { methods_count: 0, classes_count: 0, interpretation_progress: 70 },
+      indexing_progress: { phase: 'embedding', percent: 10, eta_seconds: 0 },
+    })} />)
+    expect(screen.getByText(/进度 10%/)).not.toBeNull()
+    expect(screen.queryByText(/70%/)).toBeNull()
+  })
+
   it('partial：可回答但可能不完整', () => {
     render(<ProjectStatusDetail project={mk({
       status: 'partial',

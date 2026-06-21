@@ -8,23 +8,25 @@ interface Props {
   project: Project
 }
 
-function etaText(project: Project): string {
-  const eta = project.indexing_progress?.eta_seconds ?? 0
-  if (eta <= 0) return ''
+function etaText(eta: number | undefined): string {
+  if (eta == null || eta <= 0) return ''
   const mins = Math.max(1, Math.round(eta / 60))
   return `，约 ${mins} 分钟`
 }
 
 export function ProjectStatusDetail({ project }: Props) {
-  const progress = project.stats.interpretation_progress
   let body: string
   switch (project.status) {
-    case 'indexing':
-      body = `正在索引代码 · 解读 ${progress}%。索引完成前暂不可提问，完成后会自动通知${etaText(project)}。`
+    case 'indexing': {
+      const pct = project.indexing_progress?.percent ?? 0
+      body = `正在索引代码 · 进度 ${pct}%。索引完成前暂不可提问，完成后会自动通知${etaText(project.indexing_progress?.eta_seconds)}。`
       break
-    case 'partial':
+    }
+    case 'partial': {
+      const progress = project.stats.interpretation_progress
       body = `解读进行中（${progress}%）· 已有数据可回答，但部分内容尚未解读，回答可能不完整。`
       break
+    }
     case 'failed':
       body = '索引失败，请联系管理员重试。'
       break
