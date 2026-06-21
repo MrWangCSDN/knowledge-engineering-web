@@ -20,6 +20,9 @@ import { ChatInput } from '@/components/chat/ChatInput'
 import { MessageList } from '@/components/chat/MessageList'
 import { ContextWindowBar } from '@/components/chat/ContextWindowBar'
 import type { Message } from '@/types/chat'
+// 工程状态 gating：flag 开 + 状态 indexing/failed 时禁用底部输入框
+import { isProjectStatusEnabled } from '@/config/features'
+import { isQAGated } from '@/lib/projectGating'
 // 代码片段查看器 store：用于将当前 projectId 注入到 store（openEntity 拼 URL 时需要）；
 // 抽屉本身已上移到 AppLayout 单点挂载（分屏右栏），本页只负责注入 projectId。
 import { useCodeViewerStore } from '@/store/codeViewer'
@@ -199,6 +202,11 @@ export function ChatPage() {
   const isEmpty = messages.length === 0 && !streamingMessage
   const isLoading = status === 'streaming' || status === 'submitting'
 
+  // 工程状态 gating：flag 开 + 工程为 indexing/failed 时禁用提问。
+  // 此处 project 已被上方 `if (!project) return` 收窄为非空，但仍显式判 null 以防未来重排。
+  // flag 关 → isProjectStatusEnabled() 为 false → statusGated 永远 false → 等于现状。
+  const statusGated = isProjectStatusEnabled() && project != null && isQAGated(project.status)
+
   // 归档 banner（empty state 和有消息两个路径都需要，抽成变量复用）
   const archivedBanner = isArchived && (
     <div className="border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30 px-4 py-3 mb-3 mx-4">
@@ -267,7 +275,7 @@ export function ChatPage() {
           onSend={handleSend}
           loading={isLoading}
           onAbort={abort}
-          disabled={isArchived}
+          disabled={isArchived || statusGated}
           placeholder={isArchived ? '该对话已归档，无法继续提问' : '继续追问...'}
         />
       </div>
