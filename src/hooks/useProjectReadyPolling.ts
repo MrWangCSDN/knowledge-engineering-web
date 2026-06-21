@@ -26,6 +26,8 @@ export function useProjectReadyPolling(
   const prevStatus = useRef<ProjectStatus | undefined>(status)
 
   // ── effect#1：转 ready 检测 ──────────────────────────────────────────────
+  // 注：onReady 常是调用方每次 render 新建的闭包，本 effect 因此每次 render 重跑；
+  // 但 prevStatus ref 守卫保证只有真正的「非ready→ready」跃迁才触发 onReady，重跑无副作用。
   // 仅当「上一帧有值且非 ready」且「当前帧 == ready」时，触发一次 onReady。
   useEffect(() => {
     if (prevStatus.current && prevStatus.current !== 'ready' && status === 'ready') {

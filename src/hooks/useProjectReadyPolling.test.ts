@@ -33,4 +33,13 @@ describe('useProjectReadyPolling', () => {
     rerender({ status: 'ready' as const })
     expect(onReady).toHaveBeenCalledTimes(1)
   })
+
+  it('卸载后清除 interval，不再轮询', () => {
+    const fetchSpy = vi.spyOn(useProjectStore.getState(), 'fetchProjects').mockResolvedValue()
+    const { unmount } = renderHook(() => useProjectReadyPolling('p1', 'indexing', true))
+    expect(fetchSpy).toHaveBeenCalledTimes(1) // 立即一次
+    unmount()
+    act(() => { vi.advanceTimersByTime(15000) })
+    expect(fetchSpy).toHaveBeenCalledTimes(1) // 卸载后不再增加
+  })
 })
