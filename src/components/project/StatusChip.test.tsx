@@ -25,4 +25,9 @@ describe('StatusChip', () => {
     const el = screen.getByText('失败')
     expect(el.className).toContain('text-red-700')
   })
+
+  it('partial 无 progress 显示默认"部分"', () => {
+    render(<StatusChip status="partial" />)
+    expect(screen.getByText('部分')).not.toBeNull()
+  })
 })
