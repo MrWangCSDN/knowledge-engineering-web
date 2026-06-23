@@ -184,8 +184,23 @@ describe('BindRepoPage', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────
-  // 测试 ③：createProjectBind reject 409 → 显示错误文案，不 navigate
+  // 测试 ③④⑤⑥：HTTP 错误码 → 对应中文文案，不 navigate
   // ─────────────────────────────────────────────────────────────────────
+
+  // 共享提交流程：加载页面 → 填工程名 → 点提交
+  // 用来减少各错误码用例里的重复代码
+  async function submitForm() {
+    renderPage()
+    const nameInput = await waitFor(() =>
+      screen.getByRole('textbox', { name: /工程名/i }),
+    )
+    const user = userEvent.setup()
+    await user.clear(nameInput)
+    await user.type(nameInput, '测试工程')
+    const submitBtn = screen.getByRole('button', { name: /确认绑定/i })
+    await user.click(submitBtn)
+  }
+
   it('③提交 409 → 显示「工程 ID 已存在」文案，不 navigate', async () => {
     vi.mocked(scmApi.listVisibleRepos).mockResolvedValue([targetRepo])
     vi.mocked(scmApi.listBranches).mockResolvedValue(branches)
@@ -196,20 +211,7 @@ describe('BindRepoPage', () => {
     })
     vi.mocked(scmApi.createProjectBind).mockRejectedValue(err409)
 
-    renderPage()
-
-    // 等待表单渲染
-    const nameInput = await waitFor(() =>
-      screen.getByRole('textbox', { name: /工程名/i }),
-    )
-
-    const user = userEvent.setup()
-    await user.clear(nameInput)
-    await user.type(nameInput, '测试工程')
-
-    // 提交
-    const submitBtn = screen.getByRole('button', { name: /确认绑定/i })
-    await user.click(submitBtn)
+    await submitForm()
 
     // 等待错误文案出现
     await waitFor(() => {
@@ -218,6 +220,78 @@ describe('BindRepoPage', () => {
     })
 
     // 断言 navigate 未被调用（失败不跳转）
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 测试 ④：createProjectBind reject 403 → 「你不是该仓的管理员」，不 navigate
+  // ─────────────────────────────────────────────────────────────────────
+  it('④提交 403 → 显示「你不是该仓的管理员，无法连接」，不 navigate', async () => {
+    vi.mocked(scmApi.listVisibleRepos).mockResolvedValue([targetRepo])
+    vi.mocked(scmApi.listBranches).mockResolvedValue(branches)
+
+    // 模拟 403 Forbidden 错误
+    const err403 = Object.assign(new Error('Forbidden'), {
+      response: { status: 403 },
+    })
+    vi.mocked(scmApi.createProjectBind).mockRejectedValue(err403)
+
+    await submitForm()
+
+    // 断言 403 对应的中文文案出现
+    await waitFor(() => {
+      expect(screen.getByText('你不是该仓的管理员，无法连接')).toBeInTheDocument()
+    })
+
+    // 失败不跳转
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 测试 ⑤：createProjectBind reject 502 → 「GitHub 暂时出错，重试」，不 navigate
+  // ─────────────────────────────────────────────────────────────────────
+  it('⑤提交 502 → 显示「GitHub 暂时出错，重试」，不 navigate', async () => {
+    vi.mocked(scmApi.listVisibleRepos).mockResolvedValue([targetRepo])
+    vi.mocked(scmApi.listBranches).mockResolvedValue(branches)
+
+    // 模拟 502 Bad Gateway 错误（通常是 GitHub API 不可用）
+    const err502 = Object.assign(new Error('Bad Gateway'), {
+      response: { status: 502 },
+    })
+    vi.mocked(scmApi.createProjectBind).mockRejectedValue(err502)
+
+    await submitForm()
+
+    // 断言 502 对应的中文文案出现
+    await waitFor(() => {
+      expect(screen.getByText('GitHub 暂时出错，重试')).toBeInTheDocument()
+    })
+
+    // 失败不跳转
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 测试 ⑥：createProjectBind reject 503 → 「服务未就绪，稍后重试」，不 navigate
+  // ─────────────────────────────────────────────────────────────────────
+  it('⑥提交 503 → 显示「服务未就绪，稍后重试」，不 navigate', async () => {
+    vi.mocked(scmApi.listVisibleRepos).mockResolvedValue([targetRepo])
+    vi.mocked(scmApi.listBranches).mockResolvedValue(branches)
+
+    // 模拟 503 Service Unavailable 错误（后端未就绪/部署中）
+    const err503 = Object.assign(new Error('Service Unavailable'), {
+      response: { status: 503 },
+    })
+    vi.mocked(scmApi.createProjectBind).mockRejectedValue(err503)
+
+    await submitForm()
+
+    // 断言 503 对应的中文文案出现
+    await waitFor(() => {
+      expect(screen.getByText('服务未就绪，稍后重试')).toBeInTheDocument()
+    })
+
+    // 失败不跳转
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 })

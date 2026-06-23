@@ -14,6 +14,7 @@
 
 // useState：管理本地 status 状态；useEffect：副作用（轮询/cleanup）；useCallback：稳定化函数引用；useRef：跨 render 持久化值（不触发重渲染）
 import { useState, useEffect, useCallback, useRef } from 'react'
+// pollKey 不直接用于渲染，仅作为 useEffect 依赖项——每次 increment 都会触发 effect 重跑，从而重建 setInterval
 // Loader2 / CheckCircle / XCircle / Clock：lucide 图标，统一 16px 使用
 import { Loader2, CheckCircle, XCircle, Clock } from 'lucide-react'
 // getIndexStatus：GET /projects/{id}/index-status；reindex：POST /projects/{id}/reindex
@@ -64,6 +65,11 @@ export function IndexingProgress({ projectId }: IndexingProgressProps) {
   const [status, setStatus] = useState<IndexStatus | null>(null)
   // reindexing：「重新索引」按钮的提交中状态；提交中时禁用按钮
   const [reindexing, setReindexing] = useState(false)
+  // pollKey：整数计数器，每次「重新索引」成功后 +1。
+  // 将 pollKey 加入轮询 useEffect 的依赖数组，可使 effect 在 pollKey 变化时重跑：
+  //   旧 effect cleanup → clearInterval 清掉终态后停掉的旧 timer → 新 effect → 重建 setInterval
+  // 这样解决了「done/failed 后 clearInterval，但 effect 依赖未变导致轮询永不重建」的问题。
+  const [pollKey, setPollKey] = useState(0)
 
   // statusRef：useRef 持久化最新 status，供 setInterval 回调读取而不产生闭包陈旧值。
   // useRef 与 useState 的区别：
@@ -95,6 +101,11 @@ export function IndexingProgress({ projectId }: IndexingProgressProps) {
 
   // ── 轮询副作用 ─────────────────────────────────────────────────────────────
   // useEffect：在组件挂载/依赖变化时执行副作用；返回 cleanup 函数
+  // 依赖 [fetchStatus, pollKey]：
+  //   - fetchStatus 变化（projectId 切换）→ effect 重跑，重建轮询
+  //   - pollKey 变化（「重新索引」成功后 +1）→ effect 重跑，重建轮询
+  //     这是修复「重新索引后轮询永停」bug 的关键：旧 effect cleanup 先 clearInterval，
+  //     新 effect 立即建立新 setInterval，使轮询恢复。
   useEffect(() => {
     // 立即拉一次（不等第一个 3s 间隔）
     fetchStatus()
@@ -112,9 +123,9 @@ export function IndexingProgress({ projectId }: IndexingProgressProps) {
       fetchStatus()
     }, POLL_MS)
 
-    // cleanup：组件卸载 / projectId 变化时清定时器，避免内存泄漏
+    // cleanup：组件卸载 / fetchStatus 变化 / pollKey 变化时清定时器，避免内存泄漏
     return () => clearInterval(id)
-  }, [fetchStatus])
+  }, [fetchStatus, pollKey])
 
   // ── 重新索引 ────────────────────────────────────────────────────────────────
   async function handleReindex() {
@@ -126,8 +137,13 @@ export function IndexingProgress({ projectId }: IndexingProgressProps) {
       // 成功后重置状态（让轮询可以重新跑起来），同时清 ref
       statusRef.current = null
       setStatus(null)
-      // 立即拉一次最新状态
+      // 立即拉一次最新状态（让 UI 尽快反映新 job 状态）
       await fetchStatus()
+      // pollKey +1：触发轮询 useEffect 重跑，重建 setInterval。
+      // 这是修复 C1 的核心：done/failed 后旧 interval 被 clearInterval，
+      // 若不重跑 effect 则轮询永不恢复；pollKey 变化可强制 effect 重建。
+      // 函数式更新 (k => k + 1)：避免闭包读到旧值（始终在最新值基础上 +1）
+      setPollKey(k => k + 1)
     } catch {
       // 失败静默，用户可再次点击
     } finally {

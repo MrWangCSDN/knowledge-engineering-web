@@ -213,7 +213,88 @@ describe('IndexingProgress', () => {
     expect(mockReindex).toHaveBeenCalledWith('proj-abc')
   })
 
-  // ── 测试⑥：queued 时显示「排队中」 ─────────────────────────────────────
+  // ── 测试⑥：重新索引后轮询恢复（C1 修复验证）───────────────────────────────
+  // 验证：先把轮询跑到终态（failed）→ 点「重新索引」→ 再推进时间 → 轮询应恢复
+  it('⑥重新索引后轮询恢复（C1 fix）', async () => {
+    // 阶段一：cloning → failed（两次 getIndexStatus 调用）
+    mockGetIndexStatus
+      .mockResolvedValueOnce(makeStatus({ status: 'cloning', progress: { phase: 'cloning', percent: 5 } }))
+      .mockResolvedValueOnce(makeStatus({ status: 'failed', progress: null, error: '超时' }))
+    // reindex 返回成功
+    mockReindex.mockResolvedValue({ job_id: 'new-job' })
+
+    render(<IndexingProgress projectId="proj-reindex" />)
+
+    // flush 初始 fetchStatus（cloning）
+    await flushMicrotasks()
+    expect(screen.getAllByText('克隆代码').length).toBeGreaterThanOrEqual(1)
+
+    // 推进 3s → 第二次轮询 → failed
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(screen.getByText(/索引失败/)).toBeInTheDocument()
+
+    // 记录此时调用次数（应为 2）
+    const callsAtFailed = mockGetIndexStatus.mock.calls.length
+
+    // 推进 9s，确认 failed 后轮询已停（不再调用）
+    await act(async () => { await vi.advanceTimersByTimeAsync(9000) })
+    expect(mockGetIndexStatus.mock.calls.length).toBe(callsAtFailed)
+
+    // 阶段二：reindex 成功后，配置新的 mock 序列（cloning → building_graph）
+    // mockResolvedValueOnce 此时作为下一批调用的返回值
+    mockGetIndexStatus
+      .mockResolvedValueOnce(makeStatus({ status: 'cloning', progress: { phase: 'cloning', percent: 1 } }))
+      .mockResolvedValueOnce(makeStatus({ status: 'building_graph', progress: { phase: 'building_graph', percent: 20 } }))
+
+    // 点「重新索引」
+    const btn = screen.getByRole('button', { name: '重新索引' })
+    fireEvent.click(btn)
+
+    // flush 微任务：handleReindex 里 await reindex() + await fetchStatus() + setPollKey 完成
+    // 需要多次 flush 确保 React 批量更新和 pollKey effect 都稳定
+    await flushMicrotasks()
+    await flushMicrotasks()
+
+    // getIndexStatus 应该已经多于 callsAtFailed（重置后立即拉一次）
+    expect(mockGetIndexStatus.mock.calls.length).toBeGreaterThan(callsAtFailed)
+
+    // 推进 3s，触发新 interval 的第一次轮询（building_graph）
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+
+    // 新轮询应当生效，getIndexStatus 被再次调用
+    expect(mockGetIndexStatus.mock.calls.length).toBeGreaterThan(callsAtFailed + 1)
+  })
+
+  // ── 测试⑦：卸载清 interval（避免内存泄漏）─────────────────────────────────
+  // 验证：unmount 后推进时间，getIndexStatus 不应再被调用
+  it('⑦卸载后不再轮询（cleanup 清 interval）', async () => {
+    // 持续返回 cloning（非终态），使 interval 不会因终态而 clearInterval
+    mockGetIndexStatus.mockResolvedValue(
+      makeStatus({ status: 'cloning', progress: { phase: 'cloning', percent: 5 } })
+    )
+
+    // render 并拿到 unmount 函数（render 的返回值里有 unmount）
+    const { unmount } = render(<IndexingProgress projectId="proj-unmount" />)
+
+    // flush 初始加载
+    await flushMicrotasks()
+
+    // 记录 unmount 前的调用次数
+    const callsBeforeUnmount = mockGetIndexStatus.mock.calls.length
+    // 调用次数至少 1（初始 fetchStatus）
+    expect(callsBeforeUnmount).toBeGreaterThanOrEqual(1)
+
+    // 卸载组件：触发 useEffect cleanup → clearInterval
+    unmount()
+
+    // 推进 9s（3 个 interval 周期），若 cleanup 正确，getIndexStatus 不应再被调
+    await act(async () => { await vi.advanceTimersByTimeAsync(9000) })
+
+    // 断言：卸载后调用次数不增加
+    expect(mockGetIndexStatus.mock.calls.length).toBe(callsBeforeUnmount)
+  })
+
+  // ── 测试⑥（原）：queued 时显示「排队中」 ─────────────────────────────────
   it('queued 时显示「排队中」', async () => {
     mockGetIndexStatus.mockResolvedValue(
       makeStatus({ status: 'queued', progress: null })

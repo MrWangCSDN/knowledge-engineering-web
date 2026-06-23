@@ -94,9 +94,11 @@ export function EmptyState({ project, onSend, loading, onAbort }: Props) {
         </p>
 
         {/* partial 失真警示：仅 flag 开 + 解读未完成时显示，橙色提醒回答可能不完整。
-            light/dark 都用 token 化的橙色（text-orange-600 / dark:text-orange-400）。 */}
+            使用 --color-status-progress token（index.css 中 light=#oklch(0.75 0.15 85) /
+            dark=oklch(0.82 0.14 85)），与 IndexingProgress 的 --color-status-done 用法一致，
+            不硬编码 text-orange-600 / dark:text-orange-400 裸色值。 */}
         {flagOn && project.status === 'partial' && (
-          <p className="mt-1 text-[13px] text-orange-600 dark:text-orange-400 text-center">
+          <p className="mt-1 text-[13px] text-[color:var(--color-status-progress)] text-center">
             解读 {project.stats.interpretation_progress}%（进行中，回答可能不完整）
           </p>
         )}

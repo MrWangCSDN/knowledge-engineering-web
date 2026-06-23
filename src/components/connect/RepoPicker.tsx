@@ -164,7 +164,19 @@ function RepoRow({ repo, onSelect }: RepoRowProps) {
       role={canBind ? 'button' : undefined}
       tabIndex={canBind ? 0 : undefined}
       // onKeyDown：键盘 Enter/Space 触发点击（无障碍）
-      onKeyDown={canBind ? e => (e.key === 'Enter' || e.key === ' ') && handleClick() : undefined}
+      // Space 分支必须先 preventDefault()，否则浏览器默认行为是向下滚动页面，
+      // 导致用户按 Space 选仓时页面跳动，体验差。
+      // Enter 没有此问题（Enter 在 role=button 上的默认行为不触发滚动）。
+      onKeyDown={canBind ? e => {
+        if (e.key === ' ') {
+          // preventDefault：阻止 Space 触发的页面滚动默认行为
+          e.preventDefault()
+          handleClick()
+        } else if (e.key === 'Enter') {
+          // Enter 不需要 preventDefault
+          handleClick()
+        }
+      } : undefined}
       // title：not-can_bind 时作 tooltip 提示（浏览器原生悬浮文字）
       title={
         repo.scm_role === 'can_query' && !isBound

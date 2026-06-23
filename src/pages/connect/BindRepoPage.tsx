@@ -156,9 +156,12 @@ export function BindRepoPage() {
   // useEffect：组件挂载时调 API 加载仓库+分支数据
   // 依赖 [connId, repoExternalId]：这两个值变化时重新加载
   useEffect(() => {
-    // 若 connId 不存在或 repoExternalId 不合法（<=0），不加载
-    if (!connId || !repoExternalId) {
-      setLoadError('参数缺失，请返回重新选择仓库')
+    // repoExternalId 合法性检查：Number(null)=0，Number('abc')=NaN，Number('0')=0
+    // 这三种情况均表示 URL query string 参数缺失或非法，与「仓库不存在」区分开
+    // isNaN(0) = false，所以 !repoExternalId 足以同时拒绝 0 和 NaN
+    if (!connId || !repoExternalId || isNaN(repoExternalId)) {
+      // 参数层面的错误（URL 被篡改/直接访问/来源页 bug）→ 引导用户回到选仓页
+      setLoadError('链接参数无效，请从选仓页重新进入')
       setLoading(false)
       return
     }
@@ -176,8 +179,10 @@ export function BindRepoPage() {
         const found = repos.find(r => r.external_id === repoExternalId)
 
         if (!found) {
-          // 找不到目标仓库（权限变更/参数错误）
-          setLoadError('找不到指定仓库，请返回重新选择')
+          // 已成功加载仓库列表，但列表中不含该 external_id：
+          // 说明用户的 GitHub App 授权可能已变更，该仓库已被移除授权范围。
+          // 与「URL 参数非法」用不同文案，帮助用户判断是自己操作问题还是权限问题。
+          setLoadError('未找到指定仓库，可能已调整授权')
           setLoading(false)
           return
         }
@@ -219,10 +224,14 @@ export function BindRepoPage() {
 
     try {
       // 调 createProjectBind API，传完整绑定请求体
+      // repo.external_id：使用已加载并通过 find() 校验的仓库对象字段，
+      // 而非 URL query string 派生的 repoExternalId（Number(sp.get('repo'))）。
+      // 这样即使 URL 参数被篡改，实际提交的也是服务端返回的真实 external_id，
+      // 与 repo_full_name: repo.full_name 同源，保持一致性。
       const resp = await createProjectBind(connId, {
         project_id: projectId.trim(),
         name: name.trim(),
-        repo_external_id: repoExternalId,
+        repo_external_id: repo.external_id,
         repo_full_name: repo.full_name,
         ref,
         ref_type: 'branch',
