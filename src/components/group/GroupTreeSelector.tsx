@@ -191,25 +191,23 @@ interface ProjectRowProps {
  */
 function ProjectRow({ project, currentProjectId, onSelect, depth }: ProjectRowProps) {
   const isCurrent = project.id === currentProjectId
-  const disabled = project.status === 'indexing' || project.status === 'failed'
+  // 允许点选任意状态工程（含 indexing/failed）：索引进度面板 / 报错+重新索引都在工程页内呈现，
+  // QA 输入由页面内 gating 控制。原先禁用导致刚通过连接向导建好的"索引中"工程点不进去、
+  // 进度面板被锁在门后、看不到进度。
   const indentPx = depth * 12
 
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={() => onSelect(project.id)}
       data-project-id={project.id}
       className={[
-        'w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-sm transition-colors',
+        'w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-sm transition-colors cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         // 当前选中高亮：使用 bg-primary/10（CSS 变量，light + dark 自动适配）
         isCurrent
           ? 'bg-primary/10 text-primary font-medium'
           : 'text-foreground hover:bg-muted',
-        disabled
-          ? 'opacity-50 cursor-not-allowed'
-          : 'cursor-pointer',
       ].join(' ')}
       style={{ paddingLeft: `${8 + indentPx}px` }}
     >

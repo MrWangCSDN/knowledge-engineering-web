@@ -174,7 +174,9 @@ describe('GroupTreeSelector', () => {
     expect(groupBtn).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('does not call onSelect when disabled project (indexing) is clicked', () => {
+  it('calls onSelect when an indexing project is clicked (可导航以查看进度面板)', () => {
+    // 行为变更：原先 indexing/failed 工程禁用不可点；现允许点选，
+    // 以便进入工程页查看索引进度状态机 / 报错+重新索引（QA 输入仍由页面内 gating 控制）。
     const onSelect = vi.fn()
     const projects = [mkProject({ id: 'p1', name: '索引中工程', status: 'indexing' })]
 
@@ -187,6 +189,6 @@ describe('GroupTreeSelector', () => {
     )
 
     fireEvent.click(screen.getByText('索引中工程'))
-    expect(onSelect).not.toHaveBeenCalled()
+    expect(onSelect).toHaveBeenCalledWith('p1')
   })
 })
