@@ -15,6 +15,8 @@ import { Link } from 'react-router-dom'
 import { isProjectStatusEnabled } from '@/config/features'
 // gating 纯函数：决定是否禁用提问 + 禁用占位文案
 import { isQAGated, gatedPlaceholder } from '@/lib/projectGating'
+// IndexingProgress：索引进度状态机屏（屏5），仅 indexing 状态下展示
+import { IndexingProgress } from '@/components/connect/IndexingProgress'
 
 const SAMPLE_QUESTIONS = [
   '存款开户的设计逻辑',
@@ -60,6 +62,15 @@ export function EmptyState({ project, onSend, loading, onAbort }: Props) {
             large
           />
         </div>
+
+        {/* 索引进度屏：flag 开 + status=indexing 时显示，取代/置于统计行上方。
+            project.id 用于轮询 getIndexStatus；ready 时不显示（维持现有行为）。
+            IndexingProgress 内部自己轮询，EmptyState 只负责决定是否渲染。 */}
+        {flagOn && project.status === 'indexing' && (
+          <div className="w-full mt-4">
+            <IndexingProgress projectId={project.id} />
+          </div>
+        )}
 
         {/* 工程统计：极小一行（不抢眼）。
             措辞修复：删掉无条件的"正在分析"与"解读 X%"后缀（后者在 backend 填真值前恒为脏 0%、有误导）；
