@@ -22,6 +22,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
+import { SyncHealthPanel } from '@/components/project/SyncHealthPanel'
 import { listProjectMembers, addProjectMember, removeProjectMember, changeProjectMemberRole } from '@/api/projectMembers'
 import { getProject } from '@/api/projects'
 import { updateAdminProject, deleteAdminProject } from '@/api/admin'
@@ -394,6 +395,9 @@ export function ProjectDetailPage() {
           )}
         </div>
       </div>
+
+      {/* 同步健康度面板：轮询 sync-health 接口，展示同步状态、作业计数、卡死警告等 */}
+      <SyncHealthPanel projectId={projectId} />
 
       {/* 统计信息 */}
       <section className="grid grid-cols-3 gap-4">
