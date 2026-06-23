@@ -18,7 +18,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { UserMenu } from '@/components/auth/UserMenu'
 import { GroupTreeSelector } from '@/components/group/GroupTreeSelector'
 import { CurrentProjectStatus } from '@/components/project/CurrentProjectStatus'
 import { ReadyToast } from '@/components/project/ReadyToast'
@@ -131,7 +130,6 @@ export function MainHeader() {
         >
           <Bell className="h-4 w-4" />
         </button>
-        <UserMenu />
       </div>
 
       {/* 「转 ready」提示：fixed 定位脱离 header 流，visible=false 时组件自身返 null */}

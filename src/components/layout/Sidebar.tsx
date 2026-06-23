@@ -9,16 +9,13 @@
  *
  * 设计：[[会话历史层级化-设计]] §4
  */
-import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
-import { Edit, Search, Settings, HelpCircle, Moon, Sun, PanelLeft } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Edit, Search, PanelLeft } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import { useThemeStore } from '@/store/theme'
+import { UserMenu } from '@/components/auth/UserMenu'
 import { SessionHistoryGrouped } from '@/components/session/SessionHistoryGrouped'
 
 export function Sidebar() {
-  const theme = useThemeStore(s => s.theme)
-  const toggleTheme = useThemeStore(s => s.toggleTheme)
   const navigate = useNavigate()
   // 拿 projectId + sessionId：URL 有 projectId 但无 sessionId = 在「新对话」EmptyState
   // 此时「新对话」按钮 active；进入某个 session 后 active 转移到对应 SessionItem
@@ -107,62 +104,11 @@ export function Sidebar() {
       {/* ─── 会话历史（三层折叠树，v1.5）─── */}
       <SessionHistoryGrouped />
 
-      {/* ─── 底部：套餐 / 设置 / 帮助 + 主题（字号统一 text-sm，与 ChatGPT 对齐） ─── */}
-      <div className="border-t p-2 space-y-0.5">
-        <SidebarFooterLink to="/settings" icon={Settings} label="设置" />
-        <SidebarFooterLink to="/help" icon={HelpCircle} label="帮助" disabled />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start gap-2.5 font-normal text-sm text-sidebar-foreground"
-          onClick={toggleTheme}
-        >
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          <span>{theme === 'dark' ? '亮色模式' : '暗色模式'}</span>
-        </Button>
+      {/* ─── 底部：ChatGPT 式账号菜单（设置/帮助/主题/登出都在弹窗里）─── */}
+      <div className="border-t p-2">
+        {/* UserMenu：radix DropdownMenu，向上弹出，撑满侧栏宽度 */}
+        <UserMenu />
       </div>
     </aside>
-  )
-}
-
-function SidebarFooterLink({
-  to,
-  icon: Icon,
-  label,
-  disabled,
-}: {
-  to: string
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  disabled?: boolean
-}) {
-  if (disabled) {
-    return (
-      <div
-        className="
-          flex items-center gap-2.5 px-3 py-2 rounded-lg
-          text-sm text-sidebar-muted-foreground cursor-not-allowed
-        "
-        title="v1.5 上线"
-      >
-        <Icon className="h-4 w-4" />
-        {label}
-      </div>
-    )
-  }
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-          isActive
-            ? 'bg-muted font-medium text-sidebar-foreground'
-            : 'hover:bg-muted text-sidebar-foreground'
-        }`
-      }
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </NavLink>
   )
 }

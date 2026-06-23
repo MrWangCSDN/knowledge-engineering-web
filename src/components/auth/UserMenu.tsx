@@ -1,229 +1,192 @@
 /**
  * src/components/auth/UserMenu.tsx
  *
- * 侧边栏底部用户菜单 —— 头像 + 用户名 + 下拉登出
+ * 侧边栏底部账号菜单（ChatGPT 风格）
  *
  * UI 逻辑：
- *   - 默认显示用户名 + 一个箭头
- *   - 点击展开 dropdown：显示完整 email + "登出"按钮
- *   - 点击 dropdown 外的任何地方自动关闭
+ *   - Trigger：撑满侧栏宽度的按钮，展示头像首字母 + 用户名 + 邮箱两行文字
+ *   - 点击后向上弹出 radix DropdownMenu：
+ *       账号头部（用户名 + 邮箱）
+ *       设置 → navigate('/settings')
+ *       帮助（disabled）
+ *       主题切换
+ *       分隔线
+ *       退出登录（红色，调 apiLogout + hard redirect）
  *
- * 关键 React 知识：
- *   - useRef：拿到 DOM 节点的引用，用来判断"点击是否在组件外"
- *   - useEffect + cleanup：订阅 document.mousedown 事件，组件卸载时反订阅
- *   - mousedown vs click：mousedown 早于 click 触发，避免 dropdown 关掉前
- *     里面的按钮已经接到 click（这样就点不到登出了）
+ * 关键 React / radix 知识：
+ *   - DropdownMenuTrigger asChild：让 radix 把焦点管理套在我们自己的 <button> 上，
+ *     而不是再包一层 radix 默认 button（避免 button 嵌套 button 的 HTML 非法结构）
+ *   - DropdownMenuContent side="top"：弹出层出现在 trigger 上方，符合侧边栏底部场景
+ *   - onSelect：radix DropdownMenuItem 的选中回调，选后自动关闭菜单（无需手动 setOpen）
  */
 
-// useEffect：在组件"副作用"时机执行代码（如事件监听、网络请求），是 React 函数组件的生命周期替代方案
-// useRef：创建一个可变的"盒子"，保存 DOM 节点引用；改变 ref.current 不会触发重新渲染
-// useState：声明组件内的响应式状态，改变它会触发重新渲染
-import { useEffect, useRef, useState } from 'react'
+// useNavigate：react-router-dom hook，用于在不刷新页面的情况下跳转路由
+import { useNavigate } from 'react-router-dom'
 
-// 注：登出走 window.location.href hard redirect（更稳，整页刷新清干净），
-//     故移除 useNavigate import。如未来要做软跳转其他页（如点头像 → /settings），可恢复
+// lucide-react 图标：Settings=齿轮, HelpCircle=问号圆, Sun=太阳, Moon=月亮,
+//   LogOut=退出箭头, User(别名 UserIcon)=人形轮廓（用于头像无首字母时的 fallback）
+import { Settings, HelpCircle, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react'
 
-// 从 lucide-react 引入三个 SVG 图标组件：向下箭头、登出图标、用户图标
-// User 别名为 UserIcon，避免与项目里的 User 类型同名冲突
-import { ChevronDown, LogOut, User as UserIcon } from 'lucide-react'
+// radix DropdownMenu 封装组件（@/components/ui/dropdown-menu.tsx）
+// 可用导出：DropdownMenu / Trigger / Content / Item / Label / Separator
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 
-// Button：shadcn/ui 风格的通用按钮组件，支持 variant、size 等 prop
-import { Button } from '@/components/ui/button'
-
-// apiLogout：调用后端 /auth/logout 接口，让服务器清除 refresh_token cookie
+// apiLogout：调用后端 /auth/logout 接口，让服务器清除 HttpOnly refresh_token cookie
 import { logout as apiLogout } from '@/api/auth'
 
-// useAuthStore：Zustand 全局状态 hook，存储 access_token 和登录用户信息
+// useAuthStore：Zustand 全局认证 store，s.user 存放当前登录用户信息
 import { useAuthStore } from '@/store/auth'
 
-// 2026-05-22：移除 useSessionStore / useChatStore / useProjectStore / useArchivedSessionStore
-//   原本登出时显式 reset 这四个 store —— 副作用就是 React 在 window.location.replace
-//   尚未真正发起 navigation 前先 re-render 一遍，projects=[] → ChatPage 走 if (!project &&
-//   projects.length===0) → 渲染"没有可访问的工程"banner → 然后才跳 /login，造成肉眼可见闪屏。
-//   现在：仅走 hard redirect，浏览器整页刷新自动清空所有 in-memory zustand store；
-//   LoginForm.onSubmit 入口（line 199-203）已经再清一次（belt-and-suspenders）覆盖
-//   "用户在同一 tab 不登出直接切账号"的极端场景。
+// useThemeStore：Zustand 主题 store，提供 theme ('light'|'dark') 和 toggleTheme()
+import { useThemeStore } from '@/store/theme'
 
 // export function：具名导出，调用方用 import { UserMenu } from '...' 引入
 export function UserMenu() {
-  // 注意：登出改用 window.location.href hard redirect（见 onLogout 注释），不再需要 useNavigate。
-  // 这里保留 import 占位 — 其他点击交互（如点头像跳 /settings）暂未实现但未来可能用
-
-  // 从 store 读取当前登录用户对象；selector (s => s.user) 保证只订阅 user 字段变化
-  // user 类型是 User | null；未登录或登出后值为 null
+  // 从 auth store 读取当前登录用户；selector 确保只订阅 user 字段的变化
   const user = useAuthStore((s) => s.user)
 
-  // 注：原本 const clear = useAuthStore(s => s.clear) 已删 —— 登出直接走 hard redirect，
-  // 整页刷新会把 auth store 一并清干净，无需手动 clear()（且 clear() 会触发 re-render，
-  // 与新打开"没有可访问的工程"闪屏 bug 同因）。
+  // 从 theme store 读取当前主题字符串和切换方法
+  const theme = useThemeStore((s) => s.theme)
+  const toggleTheme = useThemeStore((s) => s.toggleTheme)
 
-  // open：boolean 状态，控制 dropdown 是否展开
-  // useState(false) 表示初始值为 false（关闭状态）
-  const [open, setOpen] = useState(false)
+  // useNavigate：返回一个函数，调用时执行客户端路由跳转（不重刷页面）
+  const navigate = useNavigate()
 
-  // useRef<HTMLDivElement>(null)：
-  //   - 泛型 <HTMLDivElement> 告诉 TypeScript 这个 ref 将来会指向一个 div 元素
-  //   - 初始值为 null，React 在 DOM 挂载后会自动把真实 DOM 节点赋给 ref.current
-  //   - 与 useState 不同：修改 ref.current 不触发重新渲染，适合"只是要拿到节点"的场景
-  const ref = useRef<HTMLDivElement>(null)
-
-  // useEffect：副作用 hook，在组件挂载后执行传入的函数
-  //   - 第二个参数 [] 是依赖数组，空数组表示"只在挂载时执行一次"
-  //   - 返回的函数是 cleanup（清理函数），在组件卸载时自动调用
-  useEffect(() => {
-    // 为什么用 mousedown 而不是 click？
-    //   mousedown 比 click 早触发（按下时就触发，松开才是 click）。
-    //   如果用 click：用户点 dropdown 里的"登出"按钮时，
-    //     先触发 click → 关闭 dropdown → 登出按钮的 click 事件已消失，点不到。
-    //   用 mousedown：在按下时就判断是否在组件外，
-    //     若在外面就关闭；若在里面（如登出按钮）不关闭，让 click 正常触发。
-    function handleMouseDown(e: MouseEvent) {
-      // ref.current 在极端情况下（如组件正在卸载）可能为 null，先判断
-      // Node.contains(node)：判断目标节点是否是当前节点的后代（包括自身）
-      // e.target as Node：类型断言，告诉 TS 事件目标一定是 DOM 节点（MouseEvent.target 是 EventTarget，比 Node 更宽泛）
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        // 点击位置不在组件内 → 关闭 dropdown
-        setOpen(false)
-      }
-    }
-
-    // 在 document 上挂载全局 mousedown 监听
-    // 这样无论用户点页面哪里，回调都会触发
-    document.addEventListener('mousedown', handleMouseDown)
-
-    // cleanup 函数：组件卸载时执行，移除监听器
-    // 不清理会导致"内存泄漏"：组件已销毁，但监听器仍在 document 上，引用着已消亡的闭包
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown)
-    }
-  }, []) // 空依赖数组：只在挂载/卸载时各执行一次
-
-  // && 短路求值（条件渲染）：
-  //   左侧 !user 为 true（即 user 为 null）时，直接 return null，React 不渲染任何内容
-  //   这会在以下情况发生：用户未登录、登出后 store 被 clear、页面刚加载还没拿到 user
+  // 未登录时不渲染任何内容（防止 user.username 报错）
   if (!user) return null
 
-  // onLogout：登出处理
-  //
-  // 顺序极其重要（2026-05-22 修复"先闪没有工程再到 /login"bug）：
-  //   ① setOpen(false)        — 关掉 dropdown（视觉先收起）
-  //   ② await apiLogout()      — 后端清 HttpOnly refresh_token cookie（JS 无法直接删）
-  //   ③ window.location.replace('/login')
-  //                            — 整页硬跳转；replace 不留 history（按"后退"不会回登出前页）
-  //
-  // 关键："不要"在 ③ 前对任何 Zustand store 调 reset / clear。
-  //
-  // 旧实现的 bug：clear() + 4 个 store.reset() 触发 React 重新订阅 → ChatPage 看到
-  //   projects=[] → 走 if (!project && projects.length===0) 分支 → 渲染"没有可访问的工程"
-  //   banner → 浏览器之后才真正去拉 /login → 用户肉眼看到 1 帧（甚至更久）的闪屏。
-  //
-  // 现在做法：把"清状态"完全交给 hard redirect — 浏览器卸载本页 → JS heap 清零 →
-  //   下个 /login 页面 fresh mount，所有 in-memory zustand store 自然回到初始值。
-  //   LoginForm.onSubmit（line 199-203）还会再清一次 session/chat/project/archived，
-  //   兜底"用户没点登出直接关 tab 又开 tab 登别的账号"的极端情况。
+  // onLogout：登出处理函数
+  //   async 关键字：声明这是异步函数，内部可以用 await 等待 Promise
+  //   顺序：① 调后端清 cookie → ② hard redirect（整页跳转，清空内存 store）
   async function onLogout() {
-    setOpen(false)
     try {
+      // await：等待 apiLogout() 的 Promise 完成（后端清 HttpOnly refresh_token cookie）
       await apiLogout()
     } catch {
-      // 后端 cookie 清除失败（网络异常等）— 静默忽略，硬刷新仍能把前端登出
+      // 后端 cookie 清除失败（网络异常等）—— 静默忽略，hard redirect 仍可把前端登出
     }
-    // ⚠️ replace 不是 href —— 不在 history 留 /project/{id}，避免按"后退"回到登出前
+    // replace 而非 href：不在 history 留下当前页，按"后退"不会回到登出前的工程页
     window.location.replace('/login')
   }
 
   return (
-    // 最外层 div：relative 定位，让内部的 absolute dropdown 相对它定位
-    // ref 挂在这里，包住触发按钮和 dropdown，contains() 才能正确判断"点击在不在组件内"
-    <div className="relative" ref={ref}>
+    // DropdownMenu：radix 菜单根组件，管理开关状态和键盘交互
+    <DropdownMenu>
 
-      {/* 触发按钮：点击切换 dropdown 开关状态 */}
-      <button
-        // 函数式更新 (v) => !v：用上一次的 open 值取反，避免闭包陷阱（stale closure）
-        // 闭包陷阱：直接用 setOpen(!open) 时，open 可能是旧值；函数式更新始终基于最新状态
-        onClick={() => setOpen((v) => !v)}
-        // aria-label：无障碍属性，供屏幕阅读器读取按钮用途（视觉用户看不见，但辅助技术依赖它）
-        aria-label="用户菜单"
-        // aria-expanded：告知辅助技术当前折叠面板是否展开（true/false）
-        aria-expanded={open}
-        // Tailwind 类名说明：
-        //   flex + items-center + gap-2：横向排列子元素，间距 8px
-        //   w-full：撑满父容器宽度（适配侧边栏）
-        //   rounded-md：中等圆角
-        //   px-2 py-2：内边距 8px（水平）/ 8px（垂直）
-        //   text-left text-sm：左对齐、小字号
-        //   hover:bg-accent hover:text-accent-foreground：悬停时用主题 accent 色（跟随 light/dark 主题）
-        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm
-                   hover:bg-accent hover:text-accent-foreground"
-      >
-        {/* 头像圆圈：取用户名首字母大写显示 */}
-        {/* grid place-items-center：让内容水平+垂直居中（比 flex 更简洁的居中写法） */}
-        {/* bg-muted：主题 muted 背景色，light 下是浅灰，dark 下自动切换为深色 */}
-        <span
-          className="grid h-7 w-7 place-items-center rounded-full bg-muted text-xs font-medium"
-          aria-hidden="true"  // aria-hidden：对辅助技术隐藏（头像只是装饰，用户名才是信息载体）
+      {/* DropdownMenuTrigger asChild：
+            asChild 告诉 radix "把你的 Trigger 行为（焦点管理/aria 属性）合并到子元素上"
+            而不是再包一个 <button>；我们用自己的 <button> 以便控制样式 */}
+      <DropdownMenuTrigger asChild>
+        <button
+          // aria-label：供屏幕阅读器读出按钮用途
+          aria-label="用户菜单"
+          // Tailwind 说明：
+          //   flex items-center gap-2：横排子元素，间距 8px
+          //   w-full：撑满父容器（侧栏）宽度
+          //   rounded-md px-2 py-2：圆角 + 内边距
+          //   text-left：文字左对齐（button 默认居中）
+          //   hover:bg-accent hover:text-accent-foreground：悬停态跟随 design token，light/dark 自动适配
+          //   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring：键盘聚焦时显示焦点环（可访问性）
+          className="flex items-center gap-2 w-full rounded-md px-2 py-2 text-left
+                     hover:bg-accent hover:text-accent-foreground
+                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {/* user.username[0]：取字符串第一个字符；?.toUpperCase()：可选链，防止空字符串报错 */}
-          {/* || <UserIcon />：若首字母不存在（极端情况），fallback 显示图标 */}
-          {user.username[0]?.toUpperCase() || <UserIcon className="h-4 w-4" />}
-        </span>
-
-        {/* 用户名文字 */}
-        {/* flex-1：占据按钮剩余宽度（撑开让箭头靠右） */}
-        {/* truncate：超长时显示省略号，防止撑破侧边栏布局 */}
-        <span className="flex-1 truncate">{user.username}</span>
-
-        {/* 展开/收起箭头图标 */}
-        {/* transition-transform：CSS 过渡动画，让旋转有动画效果 */}
-        {/* open 时 rotate-180：旋转 180 度（箭头朝上，表示"点击可收起"） */}
-        <ChevronDown
-          className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
-          aria-hidden="true"  // 装饰性图标，对屏幕阅读器隐藏
-        />
-      </button>
-
-      {/* dropdown 面板：仅 open 为 true 时渲染（&& 短路，false 时 React 不挂载此节点） */}
-      {open && (
-        // absolute top-full：绝对定位，top-full 让 dropdown 出现在触发按钮下方
-        // （此组件在顶部 MainHeader 用，向下弹合理；旧版 bottom-full 是 sidebar 底部场景遗留）
-        // right-0：右对齐 trigger，避免长 email 撑到屏幕外
-        // min-w-[200px]：最小宽度，保证 email + 登出按钮可读
-        // mt-1：与按钮之间留 4px 间距
-        // border bg-popover shadow-md：主题边框色、弹出层背景色、中等阴影
-        //   bg-popover 是 shadcn/ui design token，light/dark 下自动切换，不需要手动适配
-        // z-50：层级高于其他 absolute 元素（如 sidebar 折叠 chevron / mermaid 图）
-        <div
-          className="absolute top-full right-0 mt-1 min-w-[200px] rounded-md border bg-popover shadow-md z-50"
-          // role="menu" + aria-label：让屏幕阅读器知道这是一个菜单区域
-          role="menu"
-          aria-label="用户操作菜单"
-        >
-          {/* email 展示行 */}
-          {/* border-b：底部边框，与下方登出按钮分隔 */}
-          {/* text-muted-foreground：主题 muted 文字色，light 下灰色，dark 下自动调整 */}
-          <div className="border-b px-3 py-2 text-xs text-muted-foreground">
-            {user.email}
-          </div>
-
-          {/* 登出按钮 */}
-          {/* variant="ghost"：透明背景、无边框的按钮风格（悬停时才显示背景） */}
-          {/* size="sm"：小尺寸（高度 / padding 更紧凑） */}
-          {/* justify-start：内部内容左对齐（默认 ghost 按钮内容居中） */}
-          {/* text-destructive hover:text-destructive：destructive 是主题"危险操作"色 */}
-          {/*   light 下通常是红色，dark 下自动切换为更亮的红，无需手动写色值 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 px-3 text-destructive hover:text-destructive"
-            onClick={onLogout}
-            role="menuitem"  // 告知辅助技术这是菜单项
+          {/* 头像圆圈：取用户名首字母大写 */}
+          {/* h-8 w-8 rounded-full：正圆形；grid place-items-center：内容居中 */}
+          {/* bg-muted：主题 muted 背景色，light 浅灰 / dark 深灰，自动跟随主题 */}
+          <span
+            className="grid h-8 w-8 place-items-center rounded-full bg-muted text-xs font-medium shrink-0"
+            aria-hidden="true"  // 头像是装饰，屏幕阅读器跳过
           >
-            {/* LogOut 图标（纯装饰，aria-hidden） */}
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            登出
-          </Button>
-        </div>
-      )}
-    </div>
+            {/* user.username[0]?.toUpperCase()：取首字母大写；?. 可选链防空字符串 */}
+            {/* || <UserIcon />：首字母不存在时 fallback 到图标 */}
+            {user.username[0]?.toUpperCase() || <UserIcon className="h-4 w-4" />}
+          </span>
+
+          {/* 两行文字区：min-w-0 + 父 flex 必须加，否则 truncate 不生效 */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* 第一行：用户名 */}
+            {/* truncate：overflow:hidden + text-overflow:ellipsis，超长显示省略号 */}
+            <span className="truncate text-sm font-medium">{user.username}</span>
+            {/* 第二行：邮箱（较小字号 + muted 色） */}
+            <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+          </div>
+        </button>
+      </DropdownMenuTrigger>
+
+      {/* DropdownMenuContent：弹出层容器
+            side="top"：在 trigger 上方弹出（侧边栏底部场景）
+            align="start"：与 trigger 左侧对齐
+            className w-[--radix-dropdown-menu-trigger-width]：
+              CSS 变量，radix 自动注入 trigger 的宽度，弹出层与 trigger 等宽
+            min-w-[220px]：最小宽度保证内容可读 */}
+      <DropdownMenuContent
+        side="top"
+        align="start"
+        className="w-[--radix-dropdown-menu-trigger-width] min-w-[220px]"
+      >
+        {/* ── 账号头部：展示用户名 + 邮箱 ── */}
+        {/* DropdownMenuLabel：radix 菜单标签，渲染为 div，不可交互、不会被 onSelect 触发 */}
+        <DropdownMenuLabel className="flex flex-col gap-0.5">
+          {/* font-medium：中等字重，视觉上主信息 */}
+          <span className="font-medium">{user.username}</span>
+          {/* 邮箱用小字 muted 色 */}
+          <span className="text-xs font-normal text-muted-foreground">{user.email}</span>
+        </DropdownMenuLabel>
+
+        {/* DropdownMenuSeparator：水平分隔线（bg-border，自动跟主题） */}
+        <DropdownMenuSeparator />
+
+        {/* ── 设置 ── */}
+        {/* DropdownMenuItem onSelect：用户选中（点击或 Enter）后自动关菜单，然后执行回调 */}
+        {/* onSelect 内用 () => navigate(...)：() => 是箭头函数，延迟执行（不是立刻调用） */}
+        <DropdownMenuItem onSelect={() => navigate('/settings')}>
+          {/* Settings 图标（gear）；aria-hidden 对屏幕阅读器隐藏装饰图标 */}
+          <Settings aria-hidden="true" />
+          设置
+        </DropdownMenuItem>
+
+        {/* ── 帮助（disabled，v1.5 上线）── */}
+        {/* disabled prop：radix 会加 data-disabled 属性并阻止交互，样式走 opacity-50 */}
+        <DropdownMenuItem disabled>
+          <HelpCircle aria-hidden="true" />
+          帮助
+        </DropdownMenuItem>
+
+        {/* ── 主题切换 ── */}
+        {/* 三元表达式：theme === 'dark' ? <Sun/> : <Moon/>
+              - 暗色模式下显示"太阳"图标，文案"亮色模式"（切回亮色）
+              - 亮色模式下显示"月亮"图标，文案"暗色模式"（切到暗色）
+            onSelect={() => toggleTheme()：选中后调用 theme store 的 toggle 方法 */}
+        <DropdownMenuItem onSelect={() => toggleTheme()}>
+          {theme === 'dark'
+            ? <Sun aria-hidden="true" />
+            : <Moon aria-hidden="true" />
+          }
+          {theme === 'dark' ? '亮色模式' : '暗色模式'}
+        </DropdownMenuItem>
+
+        {/* ── 分隔线 ── */}
+        <DropdownMenuSeparator />
+
+        {/* ── 退出登录（destructive 危险色）── */}
+        {/* variant="destructive"：radix DropdownMenuItem 内置 variant，
+              用 data-[variant=destructive] CSS 选择器渲染红色文字 + 聚焦红色背景 */}
+        <DropdownMenuItem
+          variant="destructive"
+          onSelect={onLogout}
+        >
+          <LogOut aria-hidden="true" />
+          退出登录
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
