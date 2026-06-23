@@ -224,6 +224,86 @@ describe('BindRepoPage', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────
+  // 测试 D2-①：切到 commit → 文本输入出现、分支下拉消失
+  // ─────────────────────────────────────────────────────────────────────
+  it('D2-①切换到 commit → 出现文本输入框，分支下拉消失', async () => {
+    vi.mocked(scmApi.listVisibleRepos).mockResolvedValue([targetRepo])
+    vi.mocked(scmApi.listBranches).mockResolvedValue(branches)
+
+    renderPage()
+
+    // 等待表单加载完成（分支下拉先出现）
+    await waitFor(() =>
+      screen.getByRole('combobox', { name: /分支/i }),
+    )
+
+    // 此时分支下拉存在，commit 文本框不存在
+    expect(screen.getByRole('combobox', { name: /分支/i })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /commit sha/i })).not.toBeInTheDocument()
+
+    // 点击 Commit 单选按钮
+    const user = userEvent.setup()
+    const commitRadio = screen.getByRole('radio', { name: /commit/i })
+    await user.click(commitRadio)
+
+    // 分支下拉消失
+    expect(screen.queryByRole('combobox', { name: /分支/i })).not.toBeInTheDocument()
+    // commit sha 文本输入出现
+    expect(screen.getByRole('textbox', { name: /commit sha/i })).toBeInTheDocument()
+  })
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 测试 D2-②：切到 commit → 输入 sha → 提交带 ref_type:'commit'
+  // ─────────────────────────────────────────────────────────────────────
+  it('D2-②切换到 commit，输入 sha，提交 → createProjectBind 带 ref_type:commit', async () => {
+    vi.mocked(scmApi.listVisibleRepos).mockResolvedValue([targetRepo])
+    vi.mocked(scmApi.listBranches).mockResolvedValue(branches)
+    vi.mocked(scmApi.createProjectBind).mockResolvedValue({
+      project_id: 'mall-swarm',
+      job_id: 'job-002',
+    })
+
+    renderPage()
+
+    // 等待表单加载完成
+    const nameInput = await waitFor(() =>
+      screen.getByRole('textbox', { name: /工程名/i }),
+    )
+
+    const user = userEvent.setup()
+
+    // 填写工程名
+    await user.clear(nameInput)
+    await user.type(nameInput, '测试工程')
+
+    // 切换到 commit
+    const commitRadio = screen.getByRole('radio', { name: /commit/i })
+    await user.click(commitRadio)
+
+    // 输入 commit sha
+    const shaInput = screen.getByRole('textbox', { name: /commit sha/i })
+    await user.type(shaInput, 'abc1234')
+
+    // 提交
+    const submitBtn = screen.getByRole('button', { name: /确认绑定/i })
+    await user.click(submitBtn)
+
+    // 等待 createProjectBind 被调用
+    await waitFor(() => {
+      expect(scmApi.createProjectBind).toHaveBeenCalledTimes(1)
+    })
+
+    // 断言 ref_type='commit'，ref='abc1234'
+    expect(scmApi.createProjectBind).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({
+        ref: 'abc1234',
+        ref_type: 'commit',
+      }),
+    )
+  })
+
+  // ─────────────────────────────────────────────────────────────────────
   // 测试 ④：createProjectBind reject 403 → 「你不是该仓的管理员」，不 navigate
   // ─────────────────────────────────────────────────────────────────────
   it('④提交 403 → 显示「你不是该仓的管理员，无法连接」，不 navigate', async () => {

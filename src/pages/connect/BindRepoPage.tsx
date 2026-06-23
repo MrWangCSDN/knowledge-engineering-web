@@ -141,7 +141,10 @@ export function BindRepoPage() {
   const [name, setName] = useState('')
   // projectId：工程 ID（slug），由 repo full_name 派生，用户可改
   const [projectId, setProjectId] = useState('')
-  // ref：选择的分支名
+  // refType：ref 的类型，'branch'（分支下拉）/ 'tag'（文本输入）/ 'commit'（文本输入）
+  // 字面量联合类型：只允许这三个字符串值之一，其它值 TypeScript 编译报错
+  const [refType, setRefType] = useState<'branch' | 'tag' | 'commit'>('branch')
+  // ref：选择的分支名 / tag 名 / commit sha
   const [ref, setRef] = useState('')
   // subpath：monorepo 子目录，可选
   const [subpath, setSubpath] = useState('')
@@ -209,6 +212,25 @@ export function BindRepoPage() {
     }
   }, [connId, repoExternalId]) // 依赖数组
 
+  // ── refType 切换 ──
+  /**
+   * 切换 ref 类型时重置 ref 值，避免携带上一种类型的残留值。
+   * 切到 branch → 恢复 default_branch；切到 tag/commit → 清空，让用户手动输入。
+   *
+   * @param next - 新选中的 refType 值
+   */
+  function handleRefTypeChange(next: 'branch' | 'tag' | 'commit') {
+    setRefType(next)
+    if (next === 'branch') {
+      // 切回分支时，恢复 default_branch（repo 此时已加载）
+      // repo?.default_branch：可选链，若 repo 为 null 则返回 undefined，|| '' 兜底空字符串
+      setRef(repo?.default_branch || '')
+    } else {
+      // 切到 tag 或 commit 时清空，等用户输入具体值
+      setRef('')
+    }
+  }
+
   // ── 表单提交 ──
   /**
    * 提交绑定请求。
@@ -234,7 +256,8 @@ export function BindRepoPage() {
         repo_external_id: repo.external_id,
         repo_full_name: repo.full_name,
         ref,
-        ref_type: 'branch',
+        // 把用户选择的 refType 传给后端，之前固定 'branch'，现在动态传入
+        ref_type: refType,
         // subpath：空字符串时传 undefined（后端不需要这个字段）
         // || undefined：利用 JavaScript 的短路逻辑，空字符串是 falsy，结果为 undefined
         subpath: subpath.trim() || undefined,
@@ -259,8 +282,10 @@ export function BindRepoPage() {
   // 正则验证 project_id 格式（与后端一致）
   // /^[a-z][a-z0-9-]{0,62}[a-z0-9]$/ 要求：首字母小写+字母/数字/连字符+末位字母/数字
   const slugValid = /^[a-z][a-z0-9-]{0,62}[a-z0-9]$/.test(projectId)
-  // 表单整体有效：name 非空 + slug 合法
-  const formValid = name.trim().length > 0 && slugValid
+  // refValid：branch 时 ref 由下拉选择总有值；tag/commit 时 ref 为文本输入，需非空
+  const refValid = refType === 'branch' ? true : ref.trim().length > 0
+  // 表单整体有效：name 非空 + slug 合法 + ref 合法
+  const formValid = name.trim().length > 0 && slugValid && refValid
 
   // ── 渲染 ──
   return (
@@ -382,33 +407,84 @@ export function BindRepoPage() {
               )}
             </div>
 
-            {/* 分支选择 */}
+            {/* Ref 类型选择 + Ref 值输入 */}
             <div>
-              <label htmlFor="bind-ref" className="text-[13px] font-medium block mb-1.5">
-                分支 *
-              </label>
-              {/* select：下拉选择框；value + onChange = 受控组件 */}
-              <select
-                id="bind-ref"
-                value={ref}
-                onChange={e => setRef(e.target.value)}
-                className="
-                  w-full px-3 py-2 text-[14px] bg-background border border-border rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-ring
-                "
-              >
-                {/* Array.map：把 branches 数组映射为 <option> 元素数组 */}
-                {/* key：React 要求列表元素有唯一 key，以便高效 diff 更新 */}
-                {branches.map(b => (
-                  <option key={b.name} value={b.name}>
-                    {b.name}
-                  </option>
+              <span className="text-[13px] font-medium block mb-1.5">
+                Ref 类型 *
+              </span>
+              {/* 三个单选按钮：branch / tag / commit */}
+              {/* flex gap-4：横向排列，间距 1rem */}
+              <div className="flex gap-4 mb-3">
+                {(
+                  [
+                    { value: 'branch', label: '分支' },
+                    { value: 'tag',    label: 'Tag'  },
+                    { value: 'commit', label: 'Commit' },
+                  ] as const
+                  // as const：把数组字面量类型固定为只读元组，value 类型保留字面量而非 string
+                ).map(opt => (
+                  <label
+                    key={opt.value}
+                    className="inline-flex items-center gap-1.5 text-[14px] cursor-pointer"
+                  >
+                    {/* type="radio"：单选；name 相同的 radio 同组互斥 */}
+                    <input
+                      type="radio"
+                      name="ref-type"
+                      value={opt.value}
+                      // checked：受控组件，当前 refType 与该选项值相等时选中
+                      checked={refType === opt.value}
+                      // onChange：切换时调 handleRefTypeChange 同步重置 ref
+                      onChange={() => handleRefTypeChange(opt.value)}
+                      className="accent-primary"
+                    />
+                    {opt.label}
+                  </label>
                 ))}
-                {/* 若分支列表为空（罕见），至少保留一个默认值可提交 */}
-                {branches.length === 0 && (
-                  <option value={repo.default_branch}>{repo.default_branch}</option>
-                )}
-              </select>
+              </div>
+
+              {/* 根据 refType 显示不同的输入控件 */}
+              {refType === 'branch' ? (
+                // ── 分支下拉（原有逻辑保留） ──
+                <select
+                  id="bind-ref"
+                  value={ref}
+                  onChange={e => setRef(e.target.value)}
+                  aria-label="分支"
+                  className="
+                    w-full px-3 py-2 text-[14px] bg-background border border-border rounded-lg
+                    focus:outline-none focus:ring-2 focus:ring-ring
+                  "
+                >
+                  {/* Array.map：把 branches 数组映射为 <option> 元素数组 */}
+                  {/* key：React 要求列表元素有唯一 key，以便高效 diff 更新 */}
+                  {branches.map(b => (
+                    <option key={b.name} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                  {/* 若分支列表为空（罕见），至少保留一个默认值可提交 */}
+                  {branches.length === 0 && (
+                    <option value={repo.default_branch}>{repo.default_branch}</option>
+                  )}
+                </select>
+              ) : (
+                // ── Tag / Commit 文本输入 ──
+                <input
+                  id="bind-ref"
+                  type="text"
+                  value={ref}
+                  onChange={e => setRef(e.target.value)}
+                  // placeholder：根据 refType 给出不同提示文字
+                  placeholder={refType === 'tag' ? '如 v1.0.0' : '完整或短 commit sha'}
+                  // aria-label：无障碍语义，让测试也能按名称查找该输入框
+                  aria-label={refType === 'tag' ? 'tag' : 'commit sha'}
+                  className="
+                    w-full px-3 py-2 text-[14px] font-mono bg-background border border-border rounded-lg
+                    focus:outline-none focus:ring-2 focus:ring-ring
+                  "
+                />
+              )}
             </div>
 
             {/* 子目录（可选） */}
