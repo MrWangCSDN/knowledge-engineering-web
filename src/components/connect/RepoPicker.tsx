@@ -124,8 +124,6 @@ function RepoRow({ repo, onSelect }: RepoRowProps) {
   const isBound = repo.bound
   // repo.scm_role：'can_bind' | 'can_query'
   const canBind = !isBound && repo.scm_role === 'can_bind'
-  // 不可绑：已绑定 或 只能查询
-  const disabled = isBound || repo.scm_role === 'can_query'
 
   // 行的基础样式：flex 水平布局 + 内边距
   // 根据是否可点切换 cursor 和 hover 效果
