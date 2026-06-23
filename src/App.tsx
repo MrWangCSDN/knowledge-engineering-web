@@ -20,7 +20,9 @@
  *     - 已登录则渲染 AppLayout，AppLayout 内部有 <Outlet />，子路由页面从那里呈现
  *   这样做的好处：只需一个父节点就能保护所有子路由，无需给每个子路由单独加守卫。
  */
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+// type Location：react-router-dom 的 Location 类型，用于类型注解
+import type { Location } from 'react-router-dom'
 // v1.9.1：React.lazy 让"用到时才下载"
 // Suspense 给 lazy 组件提供 loading fallback
 import { lazy, Suspense } from 'react'
@@ -59,7 +61,11 @@ const MethodTablePage = lazy(() => import('@/pages/MethodTablePage').then(m => (
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })))
 
 // Settings 页面（admin 才用）一起放进一个 chunk
-const SettingsLayout = lazy(() => import('@/pages/settings/SettingsLayout').then(m => ({ default: m.SettingsLayout })))
+// SettingsLayout：SettingsModal（静态 import）也依赖此模块，
+// 故改为静态 import（dynamic import 在两者同时存在时会被 bundler 合并到主 chunk，
+// lazy 声明实际不生效，消除 rolldown 的 INEFFECTIVE_DYNAMIC_IMPORT warning）。
+// 静态 import 在 App 启动时就加载，符合"设置模态频繁打开"的场景。
+import { SettingsLayout } from '@/pages/settings/SettingsLayout'
 const RepositoryListPage = lazy(() => import('@/pages/settings/RepositoryListPage').then(m => ({ default: m.RepositoryListPage })))
 const CredentialListPage = lazy(() => import('@/pages/settings/CredentialListPage').then(m => ({ default: m.CredentialListPage })))
 // v2.0 新增：多租户 settings 页面
@@ -77,6 +83,10 @@ const SelectRepoPage = lazy(() => import('@/pages/connect/SelectRepoPage').then(
 // 绑定确认页（P6 B-iii）
 const BindRepoPage = lazy(() => import('@/pages/connect/BindRepoPage').then(m => ({ default: m.BindRepoPage })))
 
+// SettingsModal：background-location 模式下的设置模态框（v2.1 新增）
+// 不 lazy：模态打开频繁，且体积小，静态 import 避免首次点击延迟
+import { SettingsModal } from '@/components/settings/SettingsModal'
+
 
 /**
  * 路由切换时显示的加载占位。
@@ -93,17 +103,75 @@ function RouteSuspenseFallback() {
   )
 }
 
+// ─── settings 子路由集合（共享 helper）────────────────────────────────────────
+// 将 /settings 子路由集中管理，主 Routes（全页）和 modal Routes 各 spread 一份，
+// 避免两处各自手写子路由导致遗漏/不一致。
+// 注意：这是一个 JSX 数组（React.ReactNode[]），不是组件；每个元素都是 <Route/>。
+function SettingsChildRoutes() {
+  // 返回 /settings 下的所有子路由，供父 Route 嵌套
+  // Fragment 写法（<>...</>）配合 React Router v7 嵌套路由使用
+  return (
+    <>
+      {/* 默认重定向到工程列表 */}
+      <Route index element={<Navigate to="/settings/projects" replace />} />
+      {/* 工程管理（原 repos，v2.0 改名 projects） */}
+      <Route path="projects" element={<RepositoryListPage />} />
+      {/* 工程详情（新） */}
+      <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+      {/* 组管理（新） */}
+      <Route path="groups" element={<GroupListPage />} />
+      {/* 组详情（新） */}
+      <Route path="groups/:groupId" element={<GroupDetailPage />} />
+      {/* 凭证管理（既有，已改 user-scoped） */}
+      <Route path="credentials" element={<CredentialListPage />} />
+      {/* 用户管理（新，admin only） */}
+      <Route path="users" element={<UserListPage />} />
+      {/* 审计日志（新，admin only） */}
+      <Route path="audit-logs" element={<AuditLogPage />} />
+      {/* 已归档对话（新，所有登录用户都可访问；归档列表按 current_user.id 过滤）*/}
+      <Route path="archived-chats" element={<ArchivedSessionsPage />} />
+      {/* SCM 连接列表（P6 B-i：GitHub 连接向导入口）*/}
+      <Route path="connections" element={<ConnectionListPage />} />
+      {/* 选仓页（P6 B-ii：连接向导屏 2）*/}
+      <Route path="connections/:connId/select" element={<SelectRepoPage />} />
+      {/* 绑定确认页（P6 B-iii：连接向导屏 3+4 合一）*/}
+      <Route path="connections/:connId/bind" element={<BindRepoPage />} />
+    </>
+  )
+}
+
 // 默认导出 —— 与原文件保持一致（default export）
 export default function App() {
   // mount 时调一次 /health（全局，覆盖登录页和登录后所有页面）
   useInfraHealthBootstrap()
+
+  // useLocation：读取当前 location 对象
+  // background-location 模式核心：当用户从应用内点「设置」时，
+  //   UserMenu 把当前 location 存入 state.background，然后 navigate 到 /settings/*。
+  //   此时 location.pathname 变为 /settings/projects，但 state.background 是跳转前的页面。
+  const location = useLocation()
+
+  // 读取 background：如果存在，说明正在以模态模式访问 /settings/*
+  // (location.state as { background?: Location } | null)：
+  //   类型断言，安全地从 state 对象取 background 字段
+  const background = (location.state as { background?: Location } | null)?.background
+
   return (
     // v1.9.1：用 Suspense 包外层，捕获所有 lazy 组件的加载等待
     // 一个 Suspense 覆盖全 Routes 是最简模型；细粒度需求可再拆
     <Suspense fallback={<RouteSuspenseFallback />}>
       {/* InfraBanner：顶层注入，sticky top-0 让任何路由（含 /login）都能看到「系统不可用」 */}
       <InfraBanner />
-      <Routes>
+
+      {/* ── 主 Routes ──────────────────────────────────────────────────────────
+          background-location 模式关键：
+            - 有 background 时：<Routes location={background}> 渲染背景页（打开模态前的页面），
+              让背景页保持在模态后面可见（虽然被遮罩遮住）。
+            - 无 background 时：<Routes location={location}> 正常渲染当前页面，
+              包括直接访问 /settings/* 的全页 fallback 场景。
+          location prop：React Router v7 允许传入 location 对象覆盖当前 URL 用于渲染，
+            这样 Routes 会以 background location 来匹配路由，而不是 /settings/projects。 */}
+      <Routes location={background ?? location}>
         {/* ── 公开路由 ──────────────────────────────────────────────── */}
         {/* /login 不经过 RequireAuth，任何人（包括未登录用户）都可访问 */}
         <Route path="/login" element={<LoginPage />} />
@@ -137,34 +205,13 @@ export default function App() {
           <Route path="/impact" element={<ImpactAnalysisPage />} />
           <Route path="/table-access" element={<MethodTablePage />} />
 
-          {/* Settings — v2.0 多租户 RBAC 扩展
-              - admin-only tab（users / audit-logs）由 SettingsLayout 内部根据 is_admin 控制可见性
-              - 后端 /admin/* 路由会拦截非 admin 调用，双重保护 */}
+          {/* Settings — v2.0 多租户 RBAC 扩展 / v2.1 background-location 全页 fallback
+              - 直接访问 /settings/* 或刷新页面时（无 state.background），渲染全页设置。
+              - 从应用内点「设置」时，background 存在，主 Routes 渲染背景页，
+                下方的 modal Routes 渲染 SettingsModal。
+              - admin-only tab（users / audit-logs）由 SettingsLayout 内部根据 is_admin 控制。 */}
           <Route path="/settings" element={<SettingsLayout />}>
-            {/* 默认重定向到工程列表 */}
-            <Route index element={<Navigate to="/settings/projects" replace />} />
-            {/* 工程管理（原 repos，v2.0 改名 projects） */}
-            <Route path="projects" element={<RepositoryListPage />} />
-            {/* 工程详情（新） */}
-            <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-            {/* 组管理（新） */}
-            <Route path="groups" element={<GroupListPage />} />
-            {/* 组详情（新） */}
-            <Route path="groups/:groupId" element={<GroupDetailPage />} />
-            {/* 凭证管理（既有，已改 user-scoped） */}
-            <Route path="credentials" element={<CredentialListPage />} />
-            {/* 用户管理（新，admin only） */}
-            <Route path="users" element={<UserListPage />} />
-            {/* 审计日志（新，admin only） */}
-            <Route path="audit-logs" element={<AuditLogPage />} />
-            {/* 已归档对话（新，所有登录用户都可访问；归档列表按 current_user.id 过滤）*/}
-            <Route path="archived-chats" element={<ArchivedSessionsPage />} />
-            {/* SCM 连接列表（P6 B-i：GitHub 连接向导入口）*/}
-            <Route path="connections" element={<ConnectionListPage />} />
-            {/* 选仓页（P6 B-ii：连接向导屏 2）*/}
-            <Route path="connections/:connId/select" element={<SelectRepoPage />} />
-            {/* 绑定确认页（P6 B-iii：连接向导屏 3+4 合一）*/}
-            <Route path="connections/:connId/bind" element={<BindRepoPage />} />
+            <SettingsChildRoutes />
           </Route>
 
           {/* GitHub App 安装回调中转（OAuth 回跳，不放 SettingsLayout，不要 settings 框）*/}
@@ -173,6 +220,21 @@ export default function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
+
+      {/* ── 模态 Routes（background-location 模式）────────────────────────────
+          background 存在时才渲染（即：从应用内以模态模式打开 /settings/*）。
+          这是一个独立的 <Routes>，它使用真实的当前 location（/settings/projects 等），
+          匹配到 /settings 路由后渲染 SettingsModal（而不是主 Routes 里的全页 SettingsLayout）。
+          SettingsModal 内部渲染 SettingsLayout + Outlet，子路由内容在模态面板内显示。 */}
+      {background && (
+        <Routes>
+          {/* /settings 模态路由：element 是 SettingsModal，内部已包含 SettingsLayout */}
+          <Route path="/settings" element={<SettingsModal />}>
+            {/* 与全页 /settings 下的子路由保持逐条一致，让模态内 Outlet 能正确渲染子页 */}
+            <SettingsChildRoutes />
+          </Route>
+        </Routes>
+      )}
     </Suspense>
   )
 }

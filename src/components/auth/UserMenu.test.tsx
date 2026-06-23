@@ -150,8 +150,11 @@ describe('UserMenu', () => {
     expect(await screen.findByText('退出登录')).toBeInTheDocument()
   })
 
-  // ── 测试 3：点设置 → navigate('/settings') ──
-  it('点设置 → navigate 收到 /settings', async () => {
+  // ── 测试 3：点设置 → navigate('/settings/projects', { state: { background } }) ──
+  // v2.1 改为 background-location 模态模式：
+  //   路径改为 /settings/projects（跳过 /settings index 的 redirect 闪烁）
+  //   第二参携带 state.background = 当前 location，供模态关闭时回到原页面
+  it('点设置 → navigate 收到 /settings/projects 且第二参含 state.background', async () => {
     const user = userEvent.setup()
     renderUserMenu()
 
@@ -160,8 +163,22 @@ describe('UserMenu', () => {
     // 等待菜单出现后点击"设置"
     await user.click(await screen.findByText('设置'))
 
-    // mockNavigate 应被以 '/settings' 调用
-    expect(mockNavigate).toHaveBeenCalledWith('/settings')
+    // navigate 应被调用一次
+    expect(mockNavigate).toHaveBeenCalledTimes(1)
+
+    // 解构调用参数
+    const [path, options] = mockNavigate.mock.calls[0]
+
+    // 路径应是 /settings/projects（直接定位到子页，跳过 redirect）
+    expect(path).toBe('/settings/projects')
+
+    // 第二参应含 state.background（背景 location 对象）
+    // toMatchObject：只检查关键字段，不要求完全一致（background 里还有 key/hash 等）
+    expect(options).toMatchObject({
+      state: {
+        background: expect.objectContaining({ pathname: expect.any(String) }),
+      },
+    })
   })
 
   // ── 测试 4：点主题 → toggleTheme 被调用 ──
