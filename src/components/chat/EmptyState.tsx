@@ -9,6 +9,8 @@
  */
 import type { Project } from '@/types/project'
 import { ChatInput } from './ChatInput'
+// Link：react-router-dom 声明式链接组件，避免整页刷新
+import { Link } from 'react-router-dom'
 // feature flag：工程状态指示总开关；关时本组件除"措辞修复"外完全等于现状
 import { isProjectStatusEnabled } from '@/config/features'
 // gating 纯函数：决定是否禁用提问 + 禁用占位文案
@@ -66,6 +68,18 @@ export function EmptyState({ project, onSend, loading, onAbort }: Props) {
           <span className="font-medium text-foreground/80">{project.name}</span>
           {' · '}
           {project.stats.methods_count} 方法
+        </p>
+
+        {/* 低调小链接：引导用户连接更多仓库。
+            text-muted-foreground/60 确保不抢眼（辅助信息），
+            hover:text-muted-foreground 悬停时略微加深，token 化、light+dark 均可读。 */}
+        <p className="mt-1.5 text-[12px] text-center">
+          <Link
+            to="/settings/connections"
+            className="text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+          >
+            连接更多仓库 →
+          </Link>
         </p>
 
         {/* partial 失真警示：仅 flag 开 + 解读未完成时显示，橙色提醒回答可能不完整。

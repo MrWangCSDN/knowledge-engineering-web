@@ -69,6 +69,9 @@ const ProjectDetailPage = lazy(() => import('@/pages/settings/ProjectDetailPage'
 const UserListPage = lazy(() => import('@/pages/settings/UserListPage').then(m => ({ default: m.UserListPage })))
 const AuditLogPage = lazy(() => import('@/pages/settings/AuditLogPage').then(m => ({ default: m.AuditLogPage })))
 const ArchivedSessionsPage = lazy(() => import('@/pages/settings/ArchivedSessionsPage').then(m => ({ default: m.ArchivedSessionsPage })))
+// SCM 连接向导页面（P6 B-i）
+const ConnectionListPage = lazy(() => import('@/pages/connect/ConnectionListPage').then(m => ({ default: m.ConnectionListPage })))
+const ConnectCallbackPage = lazy(() => import('@/pages/connect/ConnectCallbackPage').then(m => ({ default: m.ConnectCallbackPage })))
 
 
 /**
@@ -152,7 +155,12 @@ export default function App() {
             <Route path="audit-logs" element={<AuditLogPage />} />
             {/* 已归档对话（新，所有登录用户都可访问；归档列表按 current_user.id 过滤）*/}
             <Route path="archived-chats" element={<ArchivedSessionsPage />} />
+            {/* SCM 连接列表（P6 B-i：GitHub 连接向导入口）*/}
+            <Route path="connections" element={<ConnectionListPage />} />
           </Route>
+
+          {/* GitHub App 安装回调中转（OAuth 回跳，不放 SettingsLayout，不要 settings 框）*/}
+          <Route path="/connect/callback" element={<ConnectCallbackPage />} />
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>

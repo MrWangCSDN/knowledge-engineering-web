@@ -6,7 +6,9 @@
  * 设计文档：[[仓库管理-设计]] §7
  */
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, GitBranch, FolderClosed } from 'lucide-react'
+import { Plus, Trash2, GitBranch, FolderClosed, GitFork } from 'lucide-react'
+// useNavigate：命令式路由跳转，用于「连接 GitHub」按钮
+import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +32,8 @@ export function RepositoryListPage() {
   const [error, setError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  // navigate：命令式跳转，用于「连接 GitHub」按钮跳到 /settings/connections
+  const navigate = useNavigate()
 
   const refresh = async () => {
     setLoading(true)
@@ -69,10 +73,18 @@ export function RepositoryListPage() {
             连接 Git 仓库后，KE 会自动索引代码并生成业务文档（v1.1 实际索引上线）。
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="shrink-0">
-          <Plus className="h-4 w-4 mr-1" />
-          添加仓库
-        </Button>
+        {/* 按钮组：连接 GitHub（outline）+ 添加仓库（primary） */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* variant="outline"：次要操作按钮，不抢眼 */}
+          <Button variant="outline" onClick={() => navigate('/settings/connections')}>
+            <GitFork className="h-4 w-4 mr-1" />
+            连接 GitHub
+          </Button>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            添加仓库
+          </Button>
+        </div>
       </header>
 
       {error && (
