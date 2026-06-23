@@ -7,9 +7,12 @@
  *
  * 注：isProjectStatusEnabled 是静态 import，无法在同文件双值 mock，
  *     故独立建文件、vi.mock 在本文件中恒为 false。
+ *     EmptyState 现用 <Link>（连接更多仓库），渲染需 MemoryRouter 包裹。
+ *     flag 关时 IndexingProgress 不渲染（flagOn=false），无需 stub。
  */
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { EmptyState } from './EmptyState'
 import type { Project } from '@/types/project'
 
@@ -26,9 +29,17 @@ const mk = (over: Partial<Project> = {}): Project => ({
   ...over,
 })
 
+// EmptyState 现用 <Link>，需要 Router 上下文；统一用 MemoryRouter 包裹渲染
+const renderES = (project: Project) =>
+  render(
+    <MemoryRouter>
+      <EmptyState project={project} onSend={() => {}} />
+    </MemoryRouter>,
+  )
+
 describe('EmptyState flag 关 = 零影响现状', () => {
   it('indexing 工程：欢迎语仍"准备好了"、无"暂未就绪"、输入不被 status 禁用', () => {
-    render(<EmptyState project={mk({ status: 'indexing' })} onSend={() => {}} />)
+    renderES(mk({ status: 'indexing' }))
     // flag 关 → gated 永远 false → 欢迎语走常态分支
     expect(screen.getByText('准备好了，随时问我')).not.toBeNull()
     // 不出现 gated 提示
@@ -38,14 +49,11 @@ describe('EmptyState flag 关 = 零影响现状', () => {
   })
 
   it('partial 工程：不显示失真警示（flagOn=false 跳过 partial 分支）', () => {
-    render(
-      <EmptyState
-        project={mk({
-          status: 'partial',
-          stats: { methods_count: 42, classes_count: 10, interpretation_progress: 60 },
-        })}
-        onSend={() => {}}
-      />,
+    renderES(
+      mk({
+        status: 'partial',
+        stats: { methods_count: 42, classes_count: 10, interpretation_progress: 60 },
+      }),
     )
     // flag 关 → flagOn=false → partial 警示块不渲染
     expect(screen.queryByText(/解读.*%/)).toBeNull()
@@ -54,7 +62,7 @@ describe('EmptyState flag 关 = 零影响现状', () => {
   })
 
   it('ready 工程：措辞修复仍生效（无"正在分析"）', () => {
-    render(<EmptyState project={mk({ status: 'ready' })} onSend={() => {}} />)
+    renderES(mk({ status: 'ready' }))
     // 措辞修复与 flag 无关，flag 关时依然生效
     expect(screen.queryByText(/正在分析/)).toBeNull()
     expect(screen.getByText('准备好了，随时问我')).not.toBeNull()

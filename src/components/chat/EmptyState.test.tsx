@@ -7,14 +7,20 @@
  *
  * 注：mock isProjectStatusEnabled 恒为 true，以验证 flag 开时的行为。
  *     infra store 默认 healthy=true（store 初值），ChatInput 不会覆盖 placeholder。
+ *     EmptyState 现用 <Link>（连接更多仓库）+ 内含自轮询的 IndexingProgress，
+ *     故渲染需 MemoryRouter 包裹，并 stub 掉 IndexingProgress 隔离子组件 API 调用。
  */
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { EmptyState } from './EmptyState'
 import type { Project } from '@/types/project'
 
 // flag 强制为开：验证 gating / partial 警示等"开"路径行为
 vi.mock('@/config/features', () => ({ isProjectStatusEnabled: () => true }))
+// EmptyState 现含会自轮询 getIndexStatus 的 IndexingProgress 子组件；
+// 本组件测试只关心 EmptyState 自身，stub 掉子组件避免真实 API 调用与轮询。
+vi.mock('@/components/connect/IndexingProgress', () => ({ IndexingProgress: () => null }))
 
 // 工厂：构造一个最小 Project，over 覆盖需要变化的字段
 const mk = (over: Partial<Project> = {}): Project => ({
@@ -26,28 +32,33 @@ const mk = (over: Partial<Project> = {}): Project => ({
   ...over,
 })
 
+// EmptyState 现用 <Link>，需要 Router 上下文；统一用 MemoryRouter 包裹渲染
+const renderES = (project: Project) =>
+  render(
+    <MemoryRouter>
+      <EmptyState project={project} onSend={() => {}} />
+    </MemoryRouter>,
+  )
+
 describe('EmptyState 状态派生', () => {
   it('ready：不再无条件出现"正在分析"', () => {
-    render(<EmptyState project={mk({ status: 'ready' })} onSend={() => {}} />)
+    renderES(mk({ status: 'ready' }))
     expect(screen.queryByText(/正在分析/)).toBeNull()
     expect(screen.getByText('准备好了，随时问我')).not.toBeNull()
   })
 
   it('indexing：欢迎语变"暂未就绪" + 输入禁用占位', () => {
-    render(<EmptyState project={mk({ status: 'indexing' })} onSend={() => {}} />)
+    renderES(mk({ status: 'indexing' }))
     expect(screen.getByText(/暂未就绪/)).not.toBeNull()
     expect(screen.getByPlaceholderText(/正在索引/)).not.toBeNull()
   })
 
   it('partial：可提问（非 gated）+ 显示失真警示', () => {
-    render(
-      <EmptyState
-        project={mk({
-          status: 'partial',
-          stats: { methods_count: 42, classes_count: 10, interpretation_progress: 60 },
-        })}
-        onSend={() => {}}
-      />,
+    renderES(
+      mk({
+        status: 'partial',
+        stats: { methods_count: 42, classes_count: 10, interpretation_progress: 60 },
+      }),
     )
     // partial 不 gated → 欢迎语仍为常态
     expect(screen.getByText('准备好了，随时问我')).not.toBeNull()
