@@ -61,14 +61,15 @@ export function ProjectSwitcher() {
 
       <DropdownMenuContent className="w-[360px]" align="start">
         {projects.map(p => {
-          const disabled = p.status === 'indexing' || p.status === 'failed'
+          // 允许导航到任意状态的工程（含 indexing/failed）：索引进度面板 / 报错+重新索引
+          // 都在工程页内呈现，QA 输入由页面内 gating 控制，故切换器不再禁用非 ready 工程
+          // （否则刚连接的"索引中"工程点不进去，进度面板被锁在门后，看不到进度）。
           const isCurrent = p.id === current.id
           return (
             <DropdownMenuItem
               key={p.id}
-              disabled={disabled}
               onSelect={() => navigate(`/project/${p.id}`)}
-              className="flex flex-col items-start gap-1 py-2 cursor-pointer data-[disabled]:cursor-not-allowed"
+              className="flex flex-col items-start gap-1 py-2 cursor-pointer"
             >
               <div className="flex items-center gap-2 w-full">
                 {isCurrent && <span className="text-primary">✓</span>}
