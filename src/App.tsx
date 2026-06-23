@@ -72,6 +72,8 @@ const ArchivedSessionsPage = lazy(() => import('@/pages/settings/ArchivedSession
 // SCM 连接向导页面（P6 B-i）
 const ConnectionListPage = lazy(() => import('@/pages/connect/ConnectionListPage').then(m => ({ default: m.ConnectionListPage })))
 const ConnectCallbackPage = lazy(() => import('@/pages/connect/ConnectCallbackPage').then(m => ({ default: m.ConnectCallbackPage })))
+// 选仓页（P6 B-ii）
+const SelectRepoPage = lazy(() => import('@/pages/connect/SelectRepoPage').then(m => ({ default: m.SelectRepoPage })))
 
 
 /**
@@ -157,6 +159,8 @@ export default function App() {
             <Route path="archived-chats" element={<ArchivedSessionsPage />} />
             {/* SCM 连接列表（P6 B-i：GitHub 连接向导入口）*/}
             <Route path="connections" element={<ConnectionListPage />} />
+            {/* 选仓页（P6 B-ii：连接向导屏 2）*/}
+            <Route path="connections/:connId/select" element={<SelectRepoPage />} />
           </Route>
 
           {/* GitHub App 安装回调中转（OAuth 回跳，不放 SettingsLayout，不要 settings 框）*/}
