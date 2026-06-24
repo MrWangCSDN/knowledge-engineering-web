@@ -21,7 +21,8 @@
  */
 
 // useNavigate：react-router-dom hook，用于在不刷新页面的情况下跳转路由
-import { useNavigate } from 'react-router-dom'
+// useLocation：读取当前 location 对象（pathname / state 等），用于 background-location 模式
+import { useNavigate, useLocation } from 'react-router-dom'
 
 // lucide-react 图标：Settings=齿轮, HelpCircle=问号圆, Sun=太阳, Moon=月亮,
 //   LogOut=退出箭头, User(别名 UserIcon)=人形轮廓（用于头像无首字母时的 fallback）
@@ -58,6 +59,11 @@ export function UserMenu() {
 
   // useNavigate：返回一个函数，调用时执行客户端路由跳转（不重刷页面）
   const navigate = useNavigate()
+
+  // useLocation：读取当前所在的 location 对象
+  // 打开设置模态时把当前 location 存入 state.background，
+  // 这样模态关闭时能回到打开前的页面
+  const location = useLocation()
 
   // 未登录时不渲染任何内容（防止 user.username 报错）
   if (!user) return null
@@ -147,7 +153,18 @@ export function UserMenu() {
         {/* ── 设置 ── */}
         {/* DropdownMenuItem onSelect：用户选中（点击或 Enter）后自动关菜单，然后执行回调 */}
         {/* onSelect 内用 () => navigate(...)：() => 是箭头函数，延迟执行（不是立刻调用） */}
-        <DropdownMenuItem onSelect={() => navigate('/settings')}>
+        {/* background-location 模式：
+              第二参数 { state: { background: location } } 把当前页 location 存入路由 state，
+              App.tsx 检测到 state.background 后渲染 SettingsModal（而不是全页跳转），
+              模态关闭时 navigate 回 state.background 所指的页面（即这里的 location）。
+              navigate 到 /settings/projects 而非 /settings：
+              因为 /settings 默认会再 redirect 到 /settings/projects，
+              直接导到 /settings/projects 避免一次 redirect 的闪烁。 */}
+        <DropdownMenuItem
+          onSelect={() =>
+            navigate('/settings/projects', { state: { background: location } })
+          }
+        >
           {/* Settings 图标（gear）；aria-hidden 对屏幕阅读器隐藏装饰图标 */}
           <Settings aria-hidden="true" />
           设置
