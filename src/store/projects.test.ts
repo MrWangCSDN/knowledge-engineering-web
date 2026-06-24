@@ -83,6 +83,33 @@ describe('useProjectStore', () => {
     expect(state.projects).toEqual([])
   })
 
+  // ─── 静默刷新（后台轮询，修"整页几秒刷新一次"）───
+
+  it('fetchProjects(true) 静默成功：全程不置 isLoading=true（不闪 loading 骨架）', async () => {
+    // 用一个手动控制的 promise，断言"调用后、resolve 前" isLoading 仍是 false
+    let resolve!: (v: Project[]) => void
+    vi.mocked(projectsApi.listProjects).mockReturnValue(
+      new Promise<Project[]>((r) => { resolve = r }),
+    )
+    const p = useProjectStore.getState().fetchProjects(true)
+    // pending 期间：silent 不把 isLoading 翻成 true（否则消费方每 5s 闪一次）
+    expect(useProjectStore.getState().isLoading).toBe(false)
+    resolve([mkProject({ id: 'p1', status: 'ready' })])
+    await p
+    expect(useProjectStore.getState().isLoading).toBe(false)
+    expect(useProjectStore.getState().projects).toHaveLength(1)
+  })
+
+  it('fetchProjects(true) 静默失败：保留上次数据、不写 error（不闪错误条）', async () => {
+    useProjectStore.setState({ projects: [mkProject({ id: 'keep', status: 'ready' })] })
+    vi.mocked(projectsApi.listProjects).mockRejectedValue(new Error('网络错误'))
+    await useProjectStore.getState().fetchProjects(true)
+    const state = useProjectStore.getState()
+    expect(state.error).toBeNull()                  // 静默：不写 error（对比非静默会写）
+    expect(state.projects).toHaveLength(1)           // 保留上次数据
+    expect(state.projects[0].id).toBe('keep')
+  })
+
   // ─── setCurrentProject / reset ───
 
   it('setCurrentProject 更新 id', () => {

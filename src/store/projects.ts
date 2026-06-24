@@ -30,8 +30,10 @@ interface ProjectStore {
   error: string | null
 
   // ─── actions ───
-  /** 拉取列表。每次进入 ChatPage / 顶栏挂载时都应该调一次。 */
-  fetchProjects: () => Promise<void>
+  /** 拉取列表。每次进入 ChatPage / 顶栏挂载时都应该调一次。
+   *  silent=true：后台轮询用——**不** toggle isLoading、失败也不写 error，
+   *  只静默更新 projects；避免每次轮询都闪一次 loading 骨架（"整页几秒刷新一次"根因）。 */
+  fetchProjects: (silent?: boolean) => Promise<void>
   /** 设置当前工程；通常由 URL 变化驱动（useEffect 监听 useParams）。 */
   setCurrentProject: (id: string | null) => void
   /** 记住该工程下用户最后访问的 session（chat store loadSession / sendMessage meta 时调）。 */
@@ -49,11 +51,14 @@ export const useProjectStore = create<ProjectStore>()(
       isLoading: false,
       error: null,
 
-      fetchProjects: async () => {
-        set({ isLoading: true, error: null })
+      fetchProjects: async (silent = false) => {
+        // silent（后台轮询）不动 isLoading —— 否则每 5s 一次 true→false 翻转，
+        // 让消费方闪一次 loading 骨架，表现为"整页几秒刷新一次"。
+        if (!silent) set({ isLoading: true, error: null })
         try {
           const projects = await listProjects()
-          set({ projects, isLoading: false })
+          // 静默时只更新 projects，不碰 isLoading；非静默时一并落 isLoading=false。
+          set(silent ? { projects } : { projects, isLoading: false })
 
           // 兜底：currentProjectId 缺失 / 已不在新列表（权限被撤 / 工程被删
           // / localStorage 持久化的 id 已过期）→ 选首个 ready，否则任一非空。
@@ -66,8 +71,12 @@ export const useProjectStore = create<ProjectStore>()(
             set({ currentProjectId: fallback?.id ?? null })
           }
         } catch (err) {
-          const msg = err instanceof Error ? err.message : '加载工程失败'
-          set({ error: msg, isLoading: false })
+          // 静默轮询失败：保留上次数据、不写 error（避免每 5s 闪错误条）；
+          // 非静默（首屏/显式刷新）才暴露错误 + 收 loading。
+          if (!silent) {
+            const msg = err instanceof Error ? err.message : '加载工程失败'
+            set({ error: msg, isLoading: false })
+          }
         }
       },
 

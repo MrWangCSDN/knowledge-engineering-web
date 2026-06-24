@@ -46,10 +46,11 @@ export function useProjectReadyPolling(
     if (!active) return
     // 从 store 取 action 快照（非订阅；轮询场景只需调用，不需订阅 store 变化）
     const fetchProjects = useProjectStore.getState().fetchProjects
-    // 立即拉一次，避免首屏要等满 5s 才有数据
-    fetchProjects()
+    // 立即拉一次，避免首屏要等满 5s 才有数据。silent=true：后台刷新不闪 loading 骨架。
+    fetchProjects(true)
     // setInterval 固定间隔重复触发（这里语义就是固定 5s 轮询，故用 interval 而非 timeout）
-    const id = setInterval(() => { fetchProjects() }, POLL_MS)
+    // silent=true：每次轮询静默更新，避免"整页几秒刷新一次"的抖动。
+    const id = setInterval(() => { fetchProjects(true) }, POLL_MS)
     // cleanup：依赖变化 / 组件卸载时清掉旧定时器，避免泄漏 + 重复轮询
     return () => clearInterval(id)
   }, [enabled, projectId, status])
