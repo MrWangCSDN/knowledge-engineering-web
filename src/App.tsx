@@ -211,7 +211,7 @@ export default function App() {
                 下方的 modal Routes 渲染 SettingsModal。
               - admin-only tab（users / audit-logs）由 SettingsLayout 内部根据 is_admin 控制。 */}
           <Route path="/settings" element={<SettingsLayout />}>
-            <SettingsChildRoutes />
+            {SettingsChildRoutes()}
           </Route>
 
           {/* GitHub App 安装回调中转（OAuth 回跳，不放 SettingsLayout，不要 settings 框）*/}
@@ -231,7 +231,7 @@ export default function App() {
           {/* /settings 模态路由：element 是 SettingsModal，内部已包含 SettingsLayout */}
           <Route path="/settings" element={<SettingsModal />}>
             {/* 与全页 /settings 下的子路由保持逐条一致，让模态内 Outlet 能正确渲染子页 */}
-            <SettingsChildRoutes />
+            {SettingsChildRoutes()}
           </Route>
         </Routes>
       )}
